@@ -11,7 +11,8 @@ class Bridge extends EventEmitter
     this.emitRawSerial = false;
     this.mqttConnected = false;
     this.client = {};
-    this.mqttUri = 'ws://' + mqttBrokerIp + ':1883';
+    this.mqttUri = 'ws://' + mqttBrokerIp + ':3000';
+ 
   }
 
   connect()
@@ -19,7 +20,7 @@ class Bridge extends EventEmitter
     // Connect to MQTT broker and setup all event handlers
     // Note that platform code is loaded before MQTT broker plugin, so the 
     // client may attempt a few reconnects until it is successful
-    this.client = mqtt.connect(mqttUri, {
+    this.client = mqtt.connect(this.mqttUri, {
       protocolVersion: 4,
       resubscribe: true,
       will: {

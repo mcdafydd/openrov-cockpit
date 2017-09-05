@@ -36,6 +36,7 @@ CPUInterface.prototype.CheckSupport = function (cpu)
       }
       // Add the info to the target CPU Interface
       cpu.targetCPU.info = cpu.info;
+      
       return cpu;
     } else {
       throw new Error('Board doesn\'t exist in database.');
