@@ -31,10 +31,29 @@
   POSSIBILITY OF SUCH DAMAGE.
 */
 
+/*
+
+Example OpenROV strings to convert to PRO4
+
+START  camServ_inv(0);
+START  camServ_spd(45000);
+START  depth_water(0);
+START  imu_level(0,0);
+START  lift(0);
+START  mtrmod1(100,100,-100);
+START  mtrmod2(200,200,-200);
+START  pitch(0);
+START  roll(0);
+START  strafe(0);
+START  throttle(0);
+START  wake();
+START  yaw(0);
+
+*/
 const mqtt = require('mqtt');
 const EventEmitter  = require('events').EventEmitter;
 const logger        = require('AppFramework.js').logger;
-//const pro4          = require('./pro4');
+const pro4          = require('./pro4');
 
 class Bridge extends EventEmitter
 {
@@ -163,6 +182,8 @@ class Bridge extends EventEmitter
       this.mqttConnected = false;
       logger.debug('BRIDGE: MQTT broker connection closed!');
     });
+
+    let parser = new pro4();
 /*
     // Review parser function
     parser.on('data', (data) =>
@@ -201,7 +222,7 @@ class Bridge extends EventEmitter
   write( command )
   {
     // Create buffer for crc+command
-    let messagebuffer = new Buffer( command.length + 1 );
+    let pro4Buffer = new Buffer( pro4.PROTOCOL_PRO4_HEADER_SIZE + command.length + 1 );
 
     let commandParts  = command.split(/\(|\)/);
     let commandText   = commandParts[0];
@@ -212,8 +233,11 @@ class Bridge extends EventEmitter
     // Need code to map messages to appropriate topics 
     // and PRO4 packets
 
-    // Write command
-    messagebuffer.write( command, 1, command.length, 'utf-8' );
+    // Write payload to buffer, skipping header
+    pro4Buffer.writeUInt8BE( command, pro4.PROTOCOL_PRO4_HEADER_SIZE);
+
+    // dump buffer to console
+    console.dir(pro4Buffer);
 
     // Simulate the receipt of the above command
     switch (commandText) 
@@ -313,6 +337,10 @@ class Bridge extends EventEmitter
 
       case 'lights_tpow': 
       {
+        let pro4Address = 0x62; // default thruster group id
+        let flags = 2; // defined by VideoRay
+        let length = 6; // XXX
+
         // Ack command
         let power = parseInt( parameters[0] );
         this.emitStatus('lights_tpow:' + power );
@@ -461,9 +489,80 @@ class Bridge extends EventEmitter
         break;
       }
 
+      case 'gripper_open': 
+      {
+        let pro4Address = 0x23; // default thruster group id
+        let flags = 2; // defined by VideoRay
+        let length = 6; // XXX
+
+        // 35 49 open = 3 close = 2 stationary = 0
+        this.emitStatus('gripper_open:' + parameters[0]);
+        break;
+      }
+
+      case 'gripper_close': 
+      {
+        let pro4Address = 0x23; // default thruster group id
+        let flags = 2; // defined by VideoRay
+        let length = 6; // XXX
+
+        this.emitStatus('gripper_close:' + parameters[0]);
+        break;
+      }
+
+      case 'gripper_stationary': 
+      {
+        let pro4Address = 0x23; // default thruster group id
+        let flags = 2; // defined by VideoRay
+        let length = 6; // XXX
+
+        this.emitStatus('gripper_stationary:' + parameters[0]);
+        break;
+      }
+
       case 'throttle':
       {
-        this.sendToMqtt ( command );
+
+        let pro4Address = 0xff; // default thruster group id 0x81
+        let flags = 2; // VideoRay - send RESPONSE_THRUSTER_STANDARD payload in response
+        let length = 6;
+        let motor_id = 2; // Thruster ID that will reply with Response_Thruster_Standard
+
+        // thruster.py -c /dev/ttyUSB0 -i 2 -m 2 0.5 0.5 0.85
+        // Baud = 115200
+        // Node group ID = 0xff, ideally 0x81 would be better
+        // docs at http://download.videoray.com/documentation/m5_thruster/html/commands_responses.html
+
+        // Response_Thruster_Standard {
+        //   /** Measured shaft rotational velocity */
+        //   float rpm;
+        //  /** Bus voltage (Volts) */
+        //   float bus_v;
+        //   /** Bus current (Amps) */
+        //   float bus_i;
+        //   /** Temperature (Degree C) */
+        //   float temp;
+        //   /** fault flags */
+        //  uint8_t fault;
+        // }
+
+        //const uint8_t command;      // must be set to PROPULSION_COMMAND;
+        //uint8_t node_id_to_reply;   // protocol node address for the device which should send a response
+        //float *power_target;        // Variable length array of normalized power set point -1 to 1 (negative number are reverse)
+
+        // ex: throttle(0);^M - commandParts[0] = throttle
+        // parameters[0] = -12 to 12
+        // need to scale as in thruster.py
+        // ab3060e5 = header crc
+        // aa = propulsion command
+        // 00 = after 0xaa this indicates node to respond with status
+        // 00000000 = IEEE 754 thruster value for thruster 1 (4 bytes)
+        // 2b934509 = total crc       
+        // f5:5f:81:02:f0:06:ab:30:60:e5:aa:00:00:00:00:00:2b:93:45:09
+        // sync, 81 group addy
+
+
+        this.sendToMqtt ( pro4Buffer );
         logger.debug('Sending throttle update: ' + command);
         // Ack command
         this.emitStatus('throttle:' + parameters[0] );
@@ -472,7 +571,7 @@ class Bridge extends EventEmitter
 
       case 'yaw':
       {
-        this.sendToMqtt ( command );
+        this.sendToMqtt ( pro4Buffer );
         logger.debug('Sending yaw update: ' + command);
         // Ack command
         this.emitStatus('yaw:' + parameters[0] );
@@ -481,7 +580,7 @@ class Bridge extends EventEmitter
 
       case 'lift':
       {
-        this.sendToMqtt ( command );
+        this.sendToMqtt ( pro4Buffer );
         logger.debug('Sending lift update: ' + command);
         // Ack command
         this.emitStatus('lift:' + parameters[0] );
@@ -490,7 +589,7 @@ class Bridge extends EventEmitter
 
       case 'pitch':
       {
-        this.sendToMqtt ( command );
+        this.sendToMqtt ( pro4Buffer );
         logger.debug('Sending pitch update: ' + command);
         // Ack command
         this.emitStatus('pitch:' + parameters[0] );
@@ -499,7 +598,7 @@ class Bridge extends EventEmitter
 
       case 'roll':
       {
-        this.sendToMqtt ( command );
+        this.sendToMqtt ( pro4Buffer );
         logger.debug('Sending roll update: ' + command);
         // Ack command
         this.emitStatus('roll:' + parameters[0] );
@@ -508,7 +607,7 @@ class Bridge extends EventEmitter
 
       case 'strafe':
       {
-        this.sendToMqtt ( command );
+        this.sendToMqtt ( pro4Buffer );
         logger.debug('Sending strafe update: ' + command);
         // Ack command
         this.emitStatus('strafe:' + parameters[0] );
@@ -525,10 +624,11 @@ class Bridge extends EventEmitter
     this.emitStatus('cmd:' + command);
   }
 
-  sendToMqtt ( command )
+  sendToMqtt ( pro4Buffer )
   {
     if( this.mqttConnected ) 
     {
+      
       this.client.publish('toScini/elphel/request', command);
       if( this.emitRawSerial ) 
       {
