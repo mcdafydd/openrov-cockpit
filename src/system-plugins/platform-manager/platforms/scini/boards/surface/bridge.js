@@ -65,7 +65,7 @@ class Bridge extends EventEmitter
     this.mqttConnected = false;
     this.client = {};
     this.mqttUri = 'ws://' + mqttBrokerIp + ':3000';
-    this.parser = new pro4();
+    this.parser = new pro4.Pro4();
     
     // Controllerboard State - emits to telemetry plugin?
     this.cb = 
@@ -124,7 +124,7 @@ class Bridge extends EventEmitter
 
   connect()
   {
-    var self = this; 
+    let self = this; 
     
     logger.debug('BRIDGE: Starting connect() to MQTT broker');
 
@@ -170,8 +170,9 @@ class Bridge extends EventEmitter
     });
 
     this.client.on('message', (topic, message) => {
-      // message is Buffer
-      logger.debug('BRIDGE: ' + message.toString());
+      // message is a Buffer object, send to decoder
+      let parsedObj = this.parser.decode(message);
+      logger.debug('BRIDGE: Parsed message = ' + parsedObj.toString('hex'));
     });
 
     this.client.on('error', (err) => {
@@ -183,29 +184,12 @@ class Bridge extends EventEmitter
       this.mqttConnected = false;
       logger.debug('BRIDGE: MQTT broker connection closed!');
     });
-
-/*
-    // Review parser function
-    parser.on('data', (data) =>
-    {
-      let status = this.parseStatus( data.toString('utf8' ) );
-
-      // If valid status message received, emit status events
-      if( status !== null )
-      {
-        this.emit('status', status);
-
-        if( this.emitRawSerial ) 
-        {
-          this.emit('serial-recieved', data + '\n');
-        }
-      }
-    }); 
-    */
   }
 
   close()
   {
+    let self = this;
+
     logger.debug('Received bridge close().  Closing MQTT broker connection and removing status update intervals.');
 
     // Remove status interval functions
@@ -221,6 +205,7 @@ class Bridge extends EventEmitter
 
   write( command )
   {
+    let self = this;
     let commandParts  = command.split(/\(|\)/);
     let commandText   = commandParts[0];
     let parameters    = commandParts[ 1 ].split( ',' );
@@ -336,17 +321,15 @@ class Bridge extends EventEmitter
         
         // send control to all light addresses, 61, 62, and 63
         /* Pro4 header values */
-        let pro4Sync = 0xf55f;
+        let pro4Sync = pro4.constants.SYNC_REQUEST32LE;
         let pro4Address = 62; // light ids are 61, 62, and 63 
         let flags = 2; // defined by VideoRay
         let csrAddress = 0; // custom command address
         let len = 4 * 3; // 3 led banks
 
-        let cmdInterval;
-        let scaleFactor = 0.083;  // openrov caps values at 12        
+        let cmdInterval;        
         // Scale and limit thrust between 0 and 1 (maximums are 0, 1)      
-        let power = parameters[0];
-        power *= scaleFactor;  
+        let power = parameters[0] / 1000;  
         power = Math.max(power, 0);
         power = Math.min(power, 1);
 
@@ -357,22 +340,21 @@ class Bridge extends EventEmitter
         payload.writeFloatLE(power, 8);
         
         // Packet len = Header + 4-byte CRC + payload + 4-byte CRC = 27
-        let packetBuf = parser.encode(pro4Sync, pro4Address, flags, csrAddress, len, payload);
+        let packetBuf = this.parser.encode(pro4Sync, pro4Address, flags, csrAddress, len, payload);
         // DEBUG: dump values sent by OpenROV
-        logger.debug('Light value: ' + parameters[0]);
-        logger.debug('PRO4 payload: ' + packetBuf);
+        logger.debug('Light value: ' + power);
 
         // send light control command every 800ms to maintain 
         // intended device state
         cmdInterval = setInterval(function() {
-          return this.sendToMqtt(packetBuf)
+          return self.sendToMqtt(packetBuf)
         }, 800);
         
         // Ack command
         // let power = parseInt( parameters[0] );
         setTimeout( function()
         {
-          this.emitStatus('lights_pow:' + power );
+          self.emitStatus('lights_pow:' + power );
         }, 250 );
 
         break;
@@ -387,7 +369,7 @@ class Bridge extends EventEmitter
         setTimeout( function()
         {
           // Move to target position
-          this.emitStatus('elights_pow:' + power );
+          self.emitStatus('elights_pow:' + power );
         }, 250 );
 
         break;
@@ -403,7 +385,7 @@ class Bridge extends EventEmitter
         setTimeout( function()
         {
           // Move to target position
-          this.emitStatus('camServ_pos:' + pos );
+          self.emitStatus('camServ_pos:' + pos );
         }, 250 );
 
         break;
@@ -515,7 +497,7 @@ class Bridge extends EventEmitter
 
       case 'gripper_open': 
       {
-        let pro4Sync = 0xfaaf;
+        let pro4Sync = pro4.constants.SYNC_REQUEST8LE;
         let pro4Address = 0x23; // default thruster group id
         let flags = 2; // defined by VideoRay
         let length = 6; // XXX
@@ -527,7 +509,7 @@ class Bridge extends EventEmitter
 
       case 'gripper_close': 
       {
-        let pro4Sync = 0xfaaf;
+        let pro4Sync = pro4.constants.SYNC_REQUEST8LE;
         let pro4Address = 0x23; // default thruster group id
         let flags = 2; // defined by VideoRay
         let length = 6; // XXX
@@ -538,7 +520,7 @@ class Bridge extends EventEmitter
 
       case 'gripper_stationary': 
       {
-        let pro4Sync = 0xfaaf;
+        let pro4Sync = pro4.constants.SYNC_REQUEST8LE;
         let pro4Address = 0x23; // default thruster group id
         let flags = 2; // defined by VideoRay
         let length = 6; // XXX
@@ -550,15 +532,18 @@ class Bridge extends EventEmitter
       case 'throttle':
       {
         /* Pro4 header values */
-        let pro4Sync = 0xf55f;
-        let pro4Address = 0x81; // try group id 0x81 or broadcast 0xff
+        let pro4Sync = pro4.constants.SYNC_REQUEST32LE;
+        let pro4Address = 31; // or try group id 0x81 or broadcast 0xff
         let flags = 2; // VideoRay - send Response_Thruster_Standard payload in response
-        let length = 6;
+        let csrAddress = 0xF0; // custom command address        
+        let len = 6;  // propulsion cmd + single thruster value
+
+        let cmdInterval;   
 
         /* Pro4 payload values */
         /* REF: https://github.com/videoray/Thruster/blob/master/custom_command.h */
         let payloadCmd = 0xaa; // Sent as first byte of payload
-        let motorId = 2; // Second byte of payload, Thruster ID that will reply
+        let motorId = 1; // Second byte of payload, Thruster ID that will reply
         let scaleFactor = 0.083;  // openrov caps throttle values at 12
         
         let thrust = parameters[0]; // must be converted to 32-bit IEEE 754 float in payload
@@ -567,6 +552,17 @@ class Bridge extends EventEmitter
         thrust *= scaleFactor;  
         thrust = Math.max(thrust,-0.65);
         thrust = Math.min(thrust, 0.65);
+
+        // convert OpenROV light target power to 3 identical 32-bit LE floats
+        let payload = new Buffer.allocUnsafe(len);
+        payload.writeUInt8(payloadCmd, 0);
+        payload.writeUInt8(motorId, 1);        
+        payload.writeFloatLE(thrust, 2);
+        
+        // Packet len = Header + 4-byte CRC + payload + 4-byte CRC = 27
+        let packetBuf = this.parser.encode(pro4Sync, pro4Address, flags, csrAddress, len, payload);
+        // DEBUG: dump values sent by OpenROV
+        logger.debug('Throttle value: ' + thrust);
 
         // Response_Thruster_Standard {
         //   /** Measured shaft rotational velocity */
@@ -594,16 +590,24 @@ class Bridge extends EventEmitter
         // to calc 4-byte CRC (F55F/F00F)= buf.writeUInt32LE(CRC.crc32(b), 0)
         // to calc 1-byte CRC (FAAF/FDDF) = buf.writeUInt8(CRC.crc8(b), 0)
 
-        this.sendToMqtt ( thrust );
-        logger.debug('Sending throttle update: ' + thrust);
+        // send light control command every 800ms to maintain 
+        // intended device state
+        cmdInterval = setInterval(function() {
+          return self.sendToMqtt(packetBuf)
+        }, 100);
+        
         // Ack command
-        this.emitStatus('throttle:' + thrust);
+        // let power = parseInt( parameters[0] );
+        setTimeout( function()
+        {
+          self.emitStatus('throttle: ' + thrust );
+        }, 250 );
         break;
       }
 
       case 'yaw':
       {
-        let pro4Sync = 0xf55f;
+        let pro4Sync = pro4.constants.SYNC_REQUEST32LE;
         this.sendToMqtt ( command );
         logger.debug('Sending yaw update: ' + command);
         // Ack command
@@ -613,7 +617,7 @@ class Bridge extends EventEmitter
 
       case 'lift':
       {
-        let pro4Sync = 0xf55f;
+        let pro4Sync = pro4.constants.SYNC_REQUEST32LE;
         this.sendToMqtt ( command );
         logger.debug('Sending lift update: ' + command);
         // Ack command
@@ -623,7 +627,7 @@ class Bridge extends EventEmitter
 
       case 'pitch':
       {
-        let pro4Sync = 0xf55f;
+        let pro4Sync = pro4.constants.SYNC_REQUEST32LE;
         this.sendToMqtt ( command );
         logger.debug('Sending pitch update: ' + command);
         // Ack command
@@ -633,7 +637,7 @@ class Bridge extends EventEmitter
 
       case 'roll':
       {
-        let pro4Sync = 0xf55f;
+        let pro4Sync = pro4.constants.SYNC_REQUEST32LE;
         this.sendToMqtt ( command );
         logger.debug('Sending roll update: ' + command);
         // Ack command
@@ -643,7 +647,7 @@ class Bridge extends EventEmitter
 
       case 'strafe':
       {
-        let pro4Sync = 0xf55f;
+        let pro4Sync = pro4.constants.SYNC_REQUEST32LE;
         this.sendToMqtt ( command );
         logger.debug('Sending strafe update: ' + command);
         // Ack command

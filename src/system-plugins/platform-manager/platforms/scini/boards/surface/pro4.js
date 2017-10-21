@@ -35,96 +35,63 @@ const logger = require('AppFramework.js').logger;
 const Parser = require('binary-parser').Parser;
 const CRC    = require('crc');
 
-/* 
-  These types are defined by VideoRay
-  See sample code at https://github.com/videoray/VRCommsProtocol_doc 
-  for more info.
-*/
-const DEVICE_HOST_COMPUTER = 0x0;
-const DEVICE_PRO4_ROV = 0x1;
-const DEVICE_MANIPULATOR = 0x2;
-const DEVICE_CAMERA = 0x3;
-const DEVICE_THRUSTER_MODULE = 0x4;
-const DEVICE_RADIATION_SENSOR = 0x5;
-const DEVICE_CP_PROBE = 0x6;
-const DEVICE_LIGHT = 0x7;
-const DEVICE_GENERIC_SENSOR_MODULE = 0x8;
-const DEVICE_PROTOCOL_ADAPTER_MUX = 0x10;
-const DEVICE_KCF_SMART_TETHER_NODE = 0x50;
+// ******************************************************************
+//  Device types are defined by VideoRay
+//  See sample code at https://github.com/videoray/VRCommsProtocol_doc 
+//  for more info.
+//  Protocol constants
+//  See https://github.com/videoray/VRCommsProtocol_doc/blob/master/pro4%20sample/inc/protocol_pro4.h
+//
+// @name Predefined Registers
+//
+// The ADDR_UTILITY register is used for device independent actions, such as 
+// requesting the device eummeration data
+// The ADDR_REBOOT register is 16-bit at addresses 0xFE-0xFF
+// Writing the value 0xDEAD into the Utility register should cause the // device to reboot after a delay.
+// 
+// Allows for the encapsulation of a custom command protocol
+// ******************************************************************
 
-/*
-  Protocol constants
-  See https://github.com/videoray/VRCommsProtocol_doc/blob/master/pro4%20sample/inc/protocol_pro4.h
-*/
-const PROTOCOL_PRO4_HEADER_SIZE = 6;
-const PROTOCOL_PRO4_RESPONSE_DATA_PAYLOAD_START_INDEX = 8;
-const SYNC_REQUEST8LE = 0xAFFA;  // CRCs are one byte
-const SYNC_REQUEST32LE = 0x5FF5;  // CRCs are four bytes
-const SYNC_RESPONSE8LE = 0xDFFD;  // CRCs are one byte
-const SYNC_RESPONSE32LE = 0x0FF0;  // CRCs are four bytes
-const ID_BROADCAST = 0xFF;
-const ID_MULTICAST_FLAG = 0x80;
-const ID_RELAY_REQUEST_FLAG = 0x40;
-const LENGTH_EXTENDED = 0xFF; // payload larger than 254 bytes
-const TOP_OF_CSR = 0xF0;
-const TOP_OF_FULL_CSR = 0x100;
-
-/**
- *  @name Predefined Registers
- */
-/*@{*/
-/** Allows for the encapsulation of a custom command protocol */
-const ADDR_CUSTOM_COMMAND = 0xF0;
-const ADDR_CONFIG_DATA_SIZE = 0xF5;
-const ADDR_CONFIG_DATA = 0xF7;
-const ADDR_NODE_ID = 0xFB;
-const ADDR_GROUP_ID = 0xFC;
-/** The device ID returns the factory programmed unique ID for this device */
-const ADDR_DEVICE_ID = 0xFD;
-/**The Utility register to be for device independent actions, such as requesting the device eummeration data
-   The Utility register is 16-bit at addresses 0xFE-0xFF
-   Writing the value 0xDEAD into the Utility register should causes the device 
-   to reboot after a delay.
-   
-   This was previously just the REBOOT Register
-*/
-const ADDR_UTILITY = 0xFE;
-
-/** The Reboot register is 16-bit at addresses 0xFE & 0xFF
-    Writing the value 0xDEAD into the reboot register should causes the device 
-    to reboot after a delay.
-*/
-const ADDR_REBOOT = 0xFE;
-/* Note: 16-bit code is LSB First */
-const REBOOT_CODE = 0xADDE;
-const REBOOT_CODE_1 = 0xDE;
-const REBOOT_CODE_2 = 0xAD;
-/*@}*/
-
-/**
- *  @name Marcos and defines for Flag byte 
- * 
- *  The FLAG byte in a request packet defines the type of response requested.
- */
-/*@{*/
-//const NO_RESPONSE = 0x0;
-//const RESPONSE_TYPE_FLAG = 0x80;
-//const RESPONSE_CSR_DUMP = 0x80;
-//const RESPONSE_LENGTH_MASK = (~RESPONSE_TYPE_FLAG);
-/** Test if FLAG indicates a device specific response */
-//const RESPONSE_IS_DEVICE_SPECIFIC(x) (!(x & RESPONSE_TYPE_FLAG))
-/** Return length of the desired response, start address is in the Address byte*/
-//const RESPONSE_LENGTH(x) (x & RESPONSE_LENGTH_MASK)
-/** Helper to extract the device type byte from the data payload */
-//const RESPONSE_DEVICE_TYPE(x) (x[0])
-/** Helper to extract the actual data payload from a response */
-//const RESPONSE_PAYLOAD_DATA(x) (&x[1])
-/*@}*/
+const constants = {
+  DEVICE_HOST_COMPUTER: 0x0,
+  DEVICE_PRO4_ROV: 0x1,
+  DEVICE_MANIPULATOR: 0x2,
+  DEVICE_CAMERA: 0x3,
+  DEVICE_THRUSTER_MODULE: 0x4,
+  DEVICE_RADIATION_SENSOR: 0x5,
+  DEVICE_CP_PROBE: 0x6,
+  DEVICE_LIGHT: 0x7,
+  DEVICE_GENERIC_SENSOR_MODULE: 0x8,
+  DEVICE_PROTOCOL_ADAPTER_MUX: 0x10,
+  DEVICE_KCF_SMART_TETHER_NODE: 0x50,
+  PROTOCOL_PRO4_HEADER_SIZE: 6,
+  PROTOCOL_PRO4_RESPONSE_DATA_PAYLOAD_START_INDEX: 8,
+  SYNC_REQUEST8LE: 0xAFFA,  // CRCs are one byte
+  SYNC_REQUEST32LE: 0x5FF5,  // CRCs are four bytes
+  SYNC_RESPONSE8BE: 0xFDDF,  // parsed endianness, CRCs one byte
+  SYNC_RESPONSE32BE: 0xF00F,  // parsed endianness, CRCs four bytes
+  ID_BROADCAST: 0xFF,
+  ID_MULTICAST_FLAG: 0x80,
+  ID_RELAY_REQUEST_FLAG: 0x40,
+  LENGTH_EXTENDED: 0xFF, // payload larger than 254 bytes
+  TOP_OF_CSR: 0xF0,
+  TOP_OF_FULL_CSR: 0x100,
+  ADDR_CUSTOM_COMMAND: 0xF0,
+  ADDR_CONFIG_DATA_SIZE: 0xF5,
+  ADDR_CONFIG_DATA: 0xF7,
+  ADDR_NODE_ID: 0xFB,
+  ADDR_GROUP_ID: 0xFC,
+  ADDR_DEVICE_ID: 0xFD, // returns factory unique ID
+  ADDR_UTILITY: 0xFE,
+  ADDR_REBOOT: 0xFE,
+  REBOOT_CODE: 0xADDE  // LSB First
+}; 
 
 class Pro4
 {
   constructor()
   {
+    this.constants = constants;
     // Define a parser for the board information stored on the controller board's eeprom
     this.ParserCrc8 = new Parser()
       .endianess('little')
@@ -166,34 +133,36 @@ class Pro4
     // assume 1-byte CRC message, parser errors on invalid sync bytes
     let padding = 1;
 
-    if (sync === 0xf55f) {
+    if (sync === this.constants.SYNC_REQUEST32LE) {
       padding = 4;
     }
 
     // Create PRO4 packet
-    let skip = this.PROTOCOL_PRO4_HEADER_SIZE + padding + len;
-    let buf = Buffer.allocUnsafe(skip + padding);
-    buf.writeUInt16LE(sync);
-    buf.writeUint8(id);
-    buf.writeUint8(flags);
-    buf.writeUint8(csrAddress);
-    buf.writeUint8(len);
+    let skip = this.constants.PROTOCOL_PRO4_HEADER_SIZE + padding + len;
+    let buf = new Buffer.allocUnsafe(skip + padding);
+    buf.writeUInt16LE(sync, 0);
+    buf.writeUInt8(id, 2);
+    buf.writeUInt8(flags, 3);
+    buf.writeUInt8(csrAddress, 4);
+    buf.writeUInt8(len, 5);
     // Write header checksum
-    if (sync === 0xf55f) {
-      buf.writeUInt32LE(CRC.crc32(buf.slice(0,6)), this.PROTOCOL_PRO4_HEADER_SIZE+1);
+    if (sync === this.constants.SYNC_REQUEST32LE) {
+      buf.writeUInt32LE(CRC.crc32(buf.slice(0,6)), this.constants.PROTOCOL_PRO4_HEADER_SIZE+1);
     }
-    if (sync === 0xfaaf) {
-      buf.writeUInt8(CRC.crc8(buf.slice(0,6)), this.PROTOCOL_PRO4_HEADER_SIZE+1);
+    if (sync === this.constants.SYNC_REQUEST8LE) {
+      buf.writeUInt8(CRC.crc8(buf.slice(0,6)), 
+        this.constants.PROTOCOL_PRO4_HEADER_SIZE+1);
     }
-    buf.concat([payload], 1);
+    payload.copy(buf, this.constants.PROTOCOL_PRO4_HEADER_SIZE + padding, 0);
     // Write total checksum
-    if (sync === 0xf55f) {
-      buf.writeUInt32LE(CRC.crc32(buf.slice(0,skip)), skip+1);
+    if (sync === this.constants.SYNC_REQUEST32LE) {
+      buf.writeUInt32LE(CRC.crc32(buf.slice(0,skip)), skip);
     }
-    if (sync === 0xfaaf) {
-      buf.writeUInt8(CRC.crc8(buf.slice(0,skip)), skip+1);
+    if (sync === this.constants.SYNC_REQUEST8LE) {
+      buf.writeUInt8(CRC.crc8(buf.slice(0,skip)), skip);
     }
 
+    logger.debug('BRIDGE: Debug PRO4 request = ' + buf.toString('hex'))
     return buf;
   }
 
@@ -201,41 +170,43 @@ class Pro4
   decode(data)
   {
     let retVal;
+    // parsed objects are big endian
     let obj = this.ParserHead(data);
     let headerCrcPass = true;
     let totalCrcPass = true;
     let padding = 1;
     
-    if (obj.sync === 0xf55f) {
+
+    if (obj.sync === this.constants.SYNC_RESPONSE32BE) {
       padding = 4;
     }
-    let end = this.PROTOCOL_PRO4_HEADER_SIZE + padding + obj.len;
+    let end = this.constants.PROTOCOL_PRO4_HEADER_SIZE + padding + obj.len;
     
     // validate header CRC
-    if (obj.sync == 0xf55f) {
+    if (obj.sync == this.constants.SYNC_RESPONSE32BE) {
       if (obj.headerCrc !== CRC.crc32(data.slice(0,6))) {
         headerCrcPass = false;
-        logger.debug('BRIDGE: Bad header crc possible id = ' + obj.id);
+        logger.warn('BRIDGE: Bad header crc possible id = ' + obj.id);
       }
     }
-    if (obj.sync == 0xfaaf) {
+    if (obj.sync == this.constants.SYNC_RESPONSE8BE) {
       if (obj.headerCrc !== CRC.crc8(data.slice(0,6))) {
         headerCrcPass = false;
-        logger.debug('BRIDGE: Bad header crc possible id = ' + obj.id);
+        logger.warn('BRIDGE: Bad header crc possible id = ' + obj.id);
       }
     }
 
     // validate total CRC
-    if (obj.sync == 0xf55f) {
+    if (obj.sync == this.constants.SYNC_RESPONSE32BE) {
       if (obj.headerCrc !== CRC.crc32(data.slice(0,end))) {
         totalCrcPass = false;
-        logger.debug('BRIDGE: Bad total crc possible id = ' + obj.id);
+        logger.warn('BRIDGE: Bad total crc possible id = ' + obj.id);
       }
     }
-    if (obj.sync == 0xfaaf) {
+    if (obj.sync == this.constants.SYNC_RESPONSE8BE) {
       if (obj.headerCrc !== CRC.crc8(data.slice(0,end))) {
         totalCrcPass = false;
-        logger.debug('BRIDGE: Bad total crc possible id = ' + obj.id);
+        logger.warn('BRIDGE: Bad total crc possible id = ' + obj.id);
       }
     }
 
@@ -246,9 +217,12 @@ class Pro4
       retVal = {};
     }
 
+    logger.debug('BRIDGE: Debug PRO4 response = ' + obj.toString('hex'));
     return retVal;
   }
 }
 
-module.exports = Pro4;
-
+module.exports = {
+  Pro4: Pro4,
+  constants: constants
+}
