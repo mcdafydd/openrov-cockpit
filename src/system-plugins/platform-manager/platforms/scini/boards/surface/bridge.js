@@ -362,7 +362,11 @@ class Bridge extends EventEmitter
         logger.debug('Light value: ' + parameters[0]);
         logger.debug('PRO4 payload: ' + packetBuf);
 
-        cmdInterval = setInterval(this.sendToMqtt(packetBuf), 800);
+        // send light control command every 800ms to maintain 
+        // intended device state
+        cmdInterval = setInterval(function() {
+          return this.sendToMqtt(packetBuf)
+        }, 800);
         
         // Ack command
         // let power = parseInt( parameters[0] );
