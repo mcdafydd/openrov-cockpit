@@ -120,6 +120,40 @@ class Bridge extends EventEmitter
     this.depthHoldEnabled   = false;
     this.targetHoldEnabled  = false;
     this.laserEnabled       = false;
+
+    // **************** SCINI specific platform hardware state ******************
+    this.vehicleLights = {
+      time:             0,
+      timeDelta_ms:     0,
+      updateInterval:   700,  // in ms
+      power:            0,    // 0 to 1
+      pro4:             {
+        pro4Sync:       pro4.constants.SYNC_REQUEST32LE,
+        pro4Addresses:  [61, 62, 63, 64], // all updated to same value at same time
+        flags:          2,    // defined by VideoRay
+        csrAddress:     0,    // custom command address
+        len:            4 * 3 // 3 led banks
+      }
+    }
+
+    this.motorControl = {
+      time:           0,
+      timeDelta_ms:   0,
+      updateInterval: 100,  // in ms
+      aftMotor1:      0,    // primary forward/reverse throttle
+      leftMotorAft:   0,
+      leftMotorFore:  0,
+      rightMotorAft:  0,
+      rightMotorFore: 0,
+      pro4:             {
+        pro4Sync:       pro4.constants.SYNC_REQUEST32LE,
+        pro4Addresses:  [31],
+        flags:          2,    // defined by VideoRay
+        csrAddress:     0xf0,   // custom command address
+        len:            6 
+      }
+    }
+
   }
 
   connect()
@@ -132,6 +166,11 @@ class Bridge extends EventEmitter
     self.imuInterval    = setInterval( function() { return self.updateIMU; },          self.imu.timeDelta_ms );
     self.depthInterval  = setInterval( function() { return self.updateDepthSensor; },  self.depthsensortimeDelta_ms );
     self.cbInterval     = setInterval( function() { return self.updateCB; },           self.cb.timeDelta_ms );
+
+    // Add SCINI device control interval functions
+    self.lightsInterval = setInterval( function() { return self.updateLights(); },       self.vehicleLights.updateInterval );
+    //self.motorInterval    = setInterval( function() { return self.updateMotors; },     self.motorControl.updateInterval );
+
 
     // Connect to MQTT broker and setup all event handlers
     // Note that platform code is loaded before MQTT broker plugin, so the 
@@ -196,6 +235,8 @@ class Bridge extends EventEmitter
     clearInterval( this.imuInterval );
     clearInterval( this.depthInterval );
     clearInterval( this.cbInterval );
+    clearInterval( this.lightsInterval );
+    //clearInterval( this.motorInterval );
     
     this.client.end(false, () => {
       logger.debug('MQTT this.client.end() returned.');
@@ -312,57 +353,24 @@ class Bridge extends EventEmitter
       }      
 
       case 'lights_tpow': 
-      {
-        //[0.1, 0.2, 0.3]
-        //f5:5f:3d:02:00:0c:2a:c9:ad:46:cd:cc:cc:3d:cd:cc:4c:3e:9a:99:99:3e:22:ad:d8:6e
-        //Got response: 28 bytes
-        //Turnaround time: 65.192223 mS
-        //f0:0f:3d:02:f0:0e:c3:17:c1:d4:83:00:5a:07:42:66:e6:83:be:00:00:06:42:00:1a:c4:ab:7e
-        
-        // send control to all light addresses, 61, 62, and 63
-        /* Pro4 header values */
-        let pro4Sync = pro4.constants.SYNC_REQUEST32LE;
-        let pro4Addresses = [61, 62, 63, 64]; // light ids are 61, 62,63, 64 
-        let flags = 2; // defined by VideoRay
-        let csrAddress = 0; // custom command address
-        let len = 4 * 3; // 3 led banks
-       
+      { 
         // Scale and limit thrust between 0 and 1 (maximums are 0, 1)   
         let power = parameters[0] / 1000;  
         power = Math.max(power, 0);
         power = Math.min(power, 0.7);
 
-        // convert OpenROV light target power to 3 identical 32-bit LE floats
-        let payload = new Buffer.allocUnsafe(len);
-        payload.writeFloatLE(power, 0);
-        payload.writeFloatLE(power, 4);
-        payload.writeFloatLE(power, 8);
+        // Update state object to be sent on next packet interval
+        self.vehicleLights.power = power;
         
         // DEBUG: dump values sent by OpenROV after scale/limit
         logger.debug('Light value: ' + power);
-                
-        // Generate new pro4 packet for each address and setup 
-        // send intervals
-        for(let i = 0; i < pro4Addresses.length; i++) {
-          (function() {
-            let j = i;  // loop closure
-            // Packet len = Header + 4-byte CRC + payload + 4-byte CRC = 27
-            let packetBuf = this.parser.encode(pro4Sync, pro4Addresses[j], flags, csrAddress, len, payload);
-            // send light control command every 700ms to maintain 
-            // intended device state
-            let cmdInterval = setInterval(function() {
-              return self.sendToMqtt(packetBuf)
-            }, 700);
-          })();
-        }
         
         // Ack command
-        // let power = parseInt( parameters[0] );
         setTimeout( function()
         {
           self.emitStatus('lights_pow:' + power );
         }, 250 );
-
+        
         break;
       }
 
@@ -542,9 +550,7 @@ class Bridge extends EventEmitter
         let pro4Address = 31; // or try group id 0x81 or broadcast 0xff
         let flags = 2; // VideoRay - send Response_Thruster_Standard payload in response
         let csrAddress = 0xF0; // custom command address        
-        let len = 6;  // propulsion cmd + single thruster value
-
-        let cmdInterval;   
+        let len = 6;  // propulsion cmd + single thruster value 
 
         /* Pro4 payload values */
         /* REF: https://github.com/videoray/Thruster/blob/master/custom_command.h */
@@ -891,6 +897,58 @@ class Bridge extends EventEmitter
 
     // Emit status update
     this.emit( 'status', this.parseStatus( result ) );
+  }
+
+  // ****** SCINI specific device update functions ******
+  updateLights()
+  {
+    let self = this;
+
+    // Update time
+    this.vehicleLights.time += this.vehicleLights.timeDelta_ms;
+
+    // Sample script output and payload data
+    //[0.1, 0.2, 0.3]
+    //f5:5f:3d:02:00:0c:2a:c9:ad:46:cd:cc:cc:3d:cd:cc:4c:3e:9a:99:99:3e:22:ad:d8:6e
+    //Got response: 28 bytes
+    //Turnaround time: 65.192223 mS
+    //f0:0f:3d:02:f0:0e:c3:17:c1:d4:83:00:5a:07:42:66:e6:83:be:00:00:06:42:00:1a:c4:ab:7e
+
+    // convert OpenROV light target power to 3 identical 32-bit LE floats and build payload
+    let payload = new Buffer.allocUnsafe(this.vehicleLights.pro4.len);
+    payload.writeFloatLE(this.vehicleLights.power, 0);
+    payload.writeFloatLE(this.vehicleLights.power, 4);
+    payload.writeFloatLE(this.vehicleLights.power, 8);
+
+    // shorter name for easier reading
+    let p = this.vehicleLights.pro4;
+
+    // Generate new pro4 packet for each address and send to all light modules
+    for(let i = 0; i < p.pro4Addresses.length; i++) {
+      (function() {
+        let j = i;  // loop closure
+        // Packet len = Header + 4-byte CRC + payload + 4-byte CRC = 27
+        let packetBuf = self.parser.encode(p.pro4Sync, p.pro4Addresses[j], p.flags, p.csrAddress, p.len, payload);
+        // maintain light state by updating at least once per second
+        self.sendToMqtt(packetBuf);
+      })();
+    }
+    
+    // Emit status update
+    // this.emit( 'status', this.parseStatus( result ) );
+    //this.emit( 'status', this.parseStatus( result ) );
+  }
+
+  updateMotors()
+  {
+    let self = this;
+
+    // Update time
+    this.motorControl += this.motorControl.timeDelta_ms;
+
+    // Emit status update
+    // this.emit( 'status', this.parseStatus( result ) );
+    //this.emit( 'status', );
   }
 }
 
