@@ -147,19 +147,20 @@ class Pro4
     buf.writeUInt8(len, 5);
     // Write header checksum
     if (sync === this.constants.SYNC_REQUEST32LE) {
-      buf.writeUInt32LE(CRC.crc32(buf.slice(0,6)), this.constants.PROTOCOL_PRO4_HEADER_SIZE+1);
+      buf.writeUInt32LE(CRC.crc32(buf.slice(0,6)), this.constants.PROTOCOL_PRO4_HEADER_SIZE);
     }
     if (sync === this.constants.SYNC_REQUEST8LE) {
       buf.writeUInt8(CRC.crc8(buf.slice(0,6)), 
         this.constants.PROTOCOL_PRO4_HEADER_SIZE+1);
     }
-    payload.copy(buf, this.constants.PROTOCOL_PRO4_HEADER_SIZE + padding, 0);
+    let payload_start = this.constants.PROTOCOL_PRO4_HEADER_SIZE + padding;
+    payload.copy(buf, payload_start, 0);
     // Write total checksum
     if (sync === this.constants.SYNC_REQUEST32LE) {
-      buf.writeUInt32LE(CRC.crc32(buf.slice(0,skip)), skip);
+      buf.writeUInt32LE(CRC.crc32(buf.slice(payload_start, skip)), skip);
     }
     if (sync === this.constants.SYNC_REQUEST8LE) {
-      buf.writeUInt8(CRC.crc8(buf.slice(0,skip)), skip);
+      buf.writeUInt8(CRC.crc8(buf.slice(payload_start, skip)), skip);
     }
 
     logger.debug('BRIDGE: Debug PRO4 request = ' + buf.toString('hex'))
@@ -180,6 +181,7 @@ class Pro4
     if (obj.sync === this.constants.SYNC_RESPONSE32BE) {
       padding = 4;
     }
+    let payload_start = this.constants.PROTOCOL_PRO4_HEADER_SIZE + padding;
     let end = this.constants.PROTOCOL_PRO4_HEADER_SIZE + padding + obj.len;
     
     // validate header CRC
@@ -198,13 +200,13 @@ class Pro4
 
     // validate total CRC
     if (obj.sync == this.constants.SYNC_RESPONSE32BE) {
-      if (obj.headerCrc !== CRC.crc32(data.slice(0,end))) {
+      if (obj.headerCrc !== CRC.crc32(data.slice(payload_start, end))) {
         totalCrcPass = false;
         logger.warn('BRIDGE: Bad total crc possible id = ' + obj.id);
       }
     }
     if (obj.sync == this.constants.SYNC_RESPONSE8BE) {
-      if (obj.headerCrc !== CRC.crc8(data.slice(0,end))) {
+      if (obj.headerCrc !== CRC.crc8(data.slice(payload_start, end))) {
         totalCrcPass = false;
         logger.warn('BRIDGE: Bad total crc possible id = ' + obj.id);
       }
