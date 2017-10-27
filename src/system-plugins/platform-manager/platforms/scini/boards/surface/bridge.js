@@ -322,16 +322,15 @@ class Bridge extends EventEmitter
         // send control to all light addresses, 61, 62, and 63
         /* Pro4 header values */
         let pro4Sync = pro4.constants.SYNC_REQUEST32LE;
-        let pro4Address = 62; // light ids are 61, 62, and 63 
+        let pro4Addresses = [61, 62, 63, 64]; // light ids are 61, 62,63, 64 
         let flags = 2; // defined by VideoRay
         let csrAddress = 0; // custom command address
         let len = 4 * 3; // 3 led banks
-
-        let cmdInterval;        
-        // Scale and limit thrust between 0 and 1 (maximums are 0, 1)      
+       
+        // Scale and limit thrust between 0 and 1 (maximums are 0, 1)   
         let power = parameters[0] / 1000;  
         power = Math.max(power, 0);
-        power = Math.min(power, 1);
+        power = Math.min(power, 0.7);
 
         // convert OpenROV light target power to 3 identical 32-bit LE floats
         let payload = new Buffer.allocUnsafe(len);
@@ -339,16 +338,22 @@ class Bridge extends EventEmitter
         payload.writeFloatLE(power, 4);
         payload.writeFloatLE(power, 8);
         
-        // Packet len = Header + 4-byte CRC + payload + 4-byte CRC = 27
-        let packetBuf = this.parser.encode(pro4Sync, pro4Address, flags, csrAddress, len, payload);
-        // DEBUG: dump values sent by OpenROV
+        // DEBUG: dump values sent by OpenROV after scale/limit
         logger.debug('Light value: ' + power);
-
-        // send light control command every 800ms to maintain 
-        // intended device state
-        cmdInterval = setInterval(function() {
-          return self.sendToMqtt(packetBuf)
-        }, 800);
+                
+        // Generate new pro4 packet for each address and setup 
+        // send intervals
+        for(let i = 0; i < pro4Addresses.length; i++) {
+          (function() {
+            let j = i;  // loop closure
+            // Packet len = Header + 4-byte CRC + payload + 4-byte CRC = 27
+            let packetBuf = this.parser.encode(pro4Sync, pro4Addresses[j], flags, csrAddress, len, payload);
+            // send light control command every 700ms to maintain 
+            // intended device state
+            let cmdInterval = setInterval(function() {
+              return self.sendToMqtt(packetBuf)
+            }, 700);
+          })();
         
         // Ack command
         // let power = parseInt( parameters[0] );
