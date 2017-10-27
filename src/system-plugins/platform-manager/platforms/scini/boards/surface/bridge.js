@@ -354,6 +354,7 @@ class Bridge extends EventEmitter
               return self.sendToMqtt(packetBuf)
             }, 700);
           })();
+        }
         
         // Ack command
         // let power = parseInt( parameters[0] );
