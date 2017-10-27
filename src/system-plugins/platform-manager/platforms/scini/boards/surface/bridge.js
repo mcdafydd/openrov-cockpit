@@ -604,9 +604,9 @@ class Bridge extends EventEmitter
 
         // send light control command every 800ms to maintain 
         // intended device state
-        cmdInterval = setInterval(function() {
-          return self.sendToMqtt(packetBuf)
-        }, 100);
+        //let cmdInterval = setInterval(function() {
+        //  return self.sendToMqtt(packetBuf)
+        //}, 100);
         
         // Ack command
         // let power = parseInt( parameters[0] );
@@ -933,7 +933,7 @@ class Bridge extends EventEmitter
         self.sendToMqtt(packetBuf);
       })();
     }
-    
+
     // Emit status update
     // this.emit( 'status', this.parseStatus( result ) );
     //this.emit( 'status', this.parseStatus( result ) );
