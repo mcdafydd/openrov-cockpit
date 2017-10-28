@@ -125,7 +125,7 @@ class Bridge extends EventEmitter
     this.vehicleLights = {
       time:             0,
       timeDelta_ms:     0,
-      updateInterval:   700,  // in ms
+      updateInterval:   700,  // loop interval in ms
       power:            0,    // 0 to 1
       pro4:             {
         pro4Sync:       pro4.constants.SYNC_REQUEST32LE,
@@ -136,19 +136,61 @@ class Bridge extends EventEmitter
       }
     }
 
+    // If multicast = 1, we send 1 PRO4 multicast packet per updateInterval 
+    // that all motors will parse
+    // This is the preferred method of operation to reduce serial contention and
+    // latency
+    //
+    // If multicast = 0, we send 1 PRO4 packet per nodeId per updateInterval
+    // 
+    // motors array of objects description
+    // name = common name of motor position on vehicle
+    // nodeId = PRO4 header node ID
+    // motorId = part of device protocol payload, used in PRO4 multicast packets 
+    //           to control individual motor values in packet addressed to multiple 
+    //           devices starts at 0 indicating first payload value
+    //
     this.motorControl = {
-      time:           0,
-      timeDelta_ms:   0,
-      updateInterval: 100,  // in ms
-      aftMotor1:      0,    // primary forward/reverse throttle
-      leftMotorAft:   0,
-      leftMotorFore:  0,
-      rightMotorAft:  0,
-      rightMotorFore: 0,
+      time:             0,
+      timeDelta_ms:     0,
+      updateInterval:   100,    // loop interval in ms
+      multicast:        1,      // see above for description
+      motors:           [
+        {
+          name:         "thruster",   // primary forward/reverse throttle
+          nodeId:       31,     // PRO4 packet ID
+          motorId:      0,      // device protocol ID, position in PRO4 payload
+          value:        0       // thrust value (-1 to +1)
+        },
+        {
+          name:         "leftMotorAft",
+          nodeId:       32,     // PRO4 packet ID
+          motorId:      1,      // device protocol ID, position in PRO4 payload
+          value:        0       // thrust value (-1 to +1)
+        },
+        {
+          name:         "leftMotorFore",
+          nodeId:       33,     // PRO4 packet ID
+          motorId:      2,      // device protocol ID, position in PRO4 payload
+          value:        0       // thrust value (-1 to +1)
+        },
+        {
+          name:         "rightMotorAft",
+          nodeId:       34,     // PRO4 packet ID
+          motorId:      3,      // device protocol ID, position in PRO4 payload
+          value:        0       // thrust value (-1 to +1)
+        },
+        {
+          name:         "rightMotorFore",
+          nodeId:       35,     // PRO4 packet ID
+          motorId:      4,      // device protocol ID, position in PRO4 payload
+          value:        0       // thrust value (-1 to +1)
+        }
+      ],
       pro4:             {
         pro4Sync:       pro4.constants.SYNC_REQUEST32LE,
-        pro4Addresses:  [31],
-        flags:          2,    // defined by VideoRay
+        pro4Addresses:  [129],  // 0x81, multicast, see motors array above
+        flags:          2,      // defined by VideoRay
         csrAddress:     0xf0,   // custom command address
         len:            6 
       }
@@ -169,7 +211,7 @@ class Bridge extends EventEmitter
 
     // Add SCINI device control interval functions
     self.lightsInterval = setInterval( function() { return self.updateLights(); },       self.vehicleLights.updateInterval );
-    //self.motorInterval    = setInterval( function() { return self.updateMotors; },     self.motorControl.updateInterval );
+    self.motorInterval  = setInterval( function() { return self.updateMotors(); },     self.motorControl.updateInterval );
 
 
     // Connect to MQTT broker and setup all event handlers
@@ -544,38 +586,7 @@ class Bridge extends EventEmitter
       }
 
       case 'throttle':
-      {
-        /* Pro4 header values */
-        let pro4Sync = pro4.constants.SYNC_REQUEST32LE;
-        let pro4Address = 31; // or try group id 0x81 or broadcast 0xff
-        let flags = 2; // VideoRay - send Response_Thruster_Standard payload in response
-        let csrAddress = 0xF0; // custom command address        
-        let len = 6;  // propulsion cmd + single thruster value 
-
-        /* Pro4 payload values */
-        /* REF: https://github.com/videoray/Thruster/blob/master/custom_command.h */
-        let payloadCmd = 0xaa; // Sent as first byte of payload
-        let motorId = 1; // Second byte of payload, Thruster ID that will reply
-        let scaleFactor = 0.083;  // openrov caps throttle values at 12
-        
-        let thrust = parameters[0]; // must be converted to 32-bit IEEE 754 float in payload
-        
-        // Scale and limit thrust between -0.65 and 0.65 (maximums are -1, 1)      
-        thrust *= scaleFactor;  
-        thrust = Math.max(thrust,-0.65);
-        thrust = Math.min(thrust, 0.65);
-
-        // convert OpenROV light target power to 3 identical 32-bit LE floats
-        let payload = new Buffer.allocUnsafe(len);
-        payload.writeUInt8(payloadCmd, 0);
-        payload.writeUInt8(motorId, 1);        
-        payload.writeFloatLE(thrust, 2);
-        
-        // Packet len = Header + 4-byte CRC + payload + 4-byte CRC = 27
-        let packetBuf = this.parser.encode(pro4Sync, pro4Address, flags, csrAddress, len, payload);
-        // DEBUG: dump values sent by OpenROV
-        logger.debug('Throttle value: ' + thrust);
-
+      { 
         // Response_Thruster_Standard {
         //   /** Measured shaft rotational velocity */
         //   float rpm;
@@ -591,7 +602,7 @@ class Bridge extends EventEmitter
 
         // ex: throttle(0);^M - commandParts[0] = throttle
         // aa = propulsion command
-        // 00 = after 0xaa this indicates node to respond with status
+        // 00 = after 0xaa this indicates no   de to respond with status
         // 00000000 = IEEE 754 thruster value for thruster 1 (4 bytes)
         // 2b934509 = total crc       
         // Example payload, single thruster value (thrust = 0):
@@ -601,19 +612,26 @@ class Bridge extends EventEmitter
         // sync, 81 group addy
         // to calc 4-byte CRC (F55F/F00F)= buf.writeUInt32LE(CRC.crc32(b), 0)
         // to calc 1-byte CRC (FAAF/FDDF) = buf.writeUInt8(CRC.crc8(b), 0)
+        // Update state object to be sent on next packet interval
 
-        // send light control command every 800ms to maintain 
-        // intended device state
-        //let cmdInterval = setInterval(function() {
-        //  return self.sendToMqtt(packetBuf)
-        //}, 100);
+        let thrust = parameters[0]; // must be converted to 32-bit IEEE 754 float in payload
+        let scaleFactor = 0.083;  // openrov caps throttle values at 12
+
+        // Scale and limit thrust between -0.65 and 0.65 (maximums are -1, 1)      
+        thrust *= scaleFactor;  
+        thrust = Math.max(thrust,-0.65);
+        thrust = Math.min(thrust, 0.65);
+        self.motorControl.thrust = thrust;
+
+        // DEBUG: dump values sent by OpenROV
+        logger.debug('Throttle value: ' + thrust);
         
         // Ack command
-        // let power = parseInt( parameters[0] );
         setTimeout( function()
         {
           self.emitStatus('throttle: ' + thrust );
         }, 250 );
+
         break;
       }
 
@@ -906,7 +924,10 @@ class Bridge extends EventEmitter
 
     // Update time
     this.vehicleLights.time += this.vehicleLights.timeDelta_ms;
-
+/* Pro4 payload values */
+        /* REF: https://github.com/videoray/Thruster/blob/master/custom_command.h */
+        let payloadCmd = 0xaa; // Sent as first byte of payload
+        let motorId = 1; // Second byte of payload, Thruster ID that will reply 
     // Sample script output and payload data
     //[0.1, 0.2, 0.3]
     //f5:5f:3d:02:00:0c:2a:c9:ad:46:cd:cc:cc:3d:cd:cc:4c:3e:9a:99:99:3e:22:ad:d8:6e
@@ -924,7 +945,7 @@ class Bridge extends EventEmitter
     let p = this.vehicleLights.pro4;
 
     // Generate new pro4 packet for each address and send to all light modules
-    for(let i = 0; i < p.pro4Addresses.length; i++) {
+    for (let i = 0; i < p.pro4Addresses.length; i++) {
       (function() {
         let j = i;  // loop closure
         // Packet len = Header + 4-byte CRC + payload + 4-byte CRC = 27
@@ -942,13 +963,53 @@ class Bridge extends EventEmitter
   updateMotors()
   {
     let self = this;
-
+    let packetBuf;
+    
     // Update time
-    this.motorControl += this.motorControl.timeDelta_ms;
+    this.motorControl.time += this.motorControl.timeDelta_ms;
+
+    // This is lights - replace with sample motor data
+    // Sample script output and payload data
+    //[0.1, 0.2, 0.3]
+    //f5:5f:3d:02:00:0c:2a:c9:ad:46:cd:cc:cc:3d:cd:cc:4c:3e:9a:99:99:3e:22:ad:d8:6e
+    //Got response: 28 bytes
+    //Turnaround time: 65.192223 mS
+    //f0:0f:3d:02:f0:0e:c3:17:c1:d4:83:00:5a:07:42:66:e6:83:be:00:00:06:42:00:1a:c4:ab:7e
+
+    // convert OpenROV target thrust to 32-bit LE floats and build payload
+    let payload = new Buffer.allocUnsafe(this.motorControl.pro4.len);
+
+    // shorter names for easier reading
+    let m = this.motorControl.motors;
+    let p = this.motorControl.pro4;
+
+    payload.writeUInt8(payloadCmd, 0);  // device command for motor control
+    if (this.motorControl.multicast) {
+      packetBuf = self.parser.encode(p.pro4Sync, m[j].nodeId, p.flags, p.csrAddress, p.len, payload);
+      // maintain state by updating at least once per second
+      self.sendToMqtt(packetBuf);
+    }
+    else {
+      // Generate new pro4 packet for each address and send to all motor modules
+      for (let i = 0; i < m.length; i++) {
+        (function() {
+          let j = i;  // loop closure
+          // Packet len = Header + 4-byte CRC + payload + 4-byte CRC = 27
+          packetBuf = self.parser.encode(p.pro4Sync, m[j].nodeId, p.flags, p.csrAddress, p.len, payload);
+          // maintain light state by updating at least once per second
+          self.sendToMqtt(packetBuf);
+        })();
+      }
+    }
+    payload.writeUInt8(motorId, 1);     // motor ID we want to respond. should rotate
+
+    for (let x = 0; y <  m.length; x++) {
+      payload.writeFloatLE(thrust, 2);    
+    }
 
     // Emit status update
     // this.emit( 'status', this.parseStatus( result ) );
-    //this.emit( 'status', );
+    //this.emit( 'status', this.parseStatus( result ) );
   }
 }
 
