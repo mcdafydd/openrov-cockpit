@@ -136,13 +136,45 @@ class Bridge extends EventEmitter
       }
     }
 
-    // If multicast = 1, we send 1 PRO4 multicast packet per updateInterval 
-    // that all motors will parse
-    // This is the preferred method of operation to reduce serial contention and
-    // latency
+    // This loop should only emit data on the bus if the
+    // pilot requests action
+    // payload first 2 bytes = 0x3549 
+    // valid values: open = 3 close = 2 stationary = 0
+    this.gripperControl = {
+      time:             0,
+      timeDelta_ms:     0,
+      updateInterval:   250,  // loop interval in ms
+      state:            0,    // 0 (stop), 2 (close), 3 (open)
+      grippers:         [
+        {
+          name:         "Gripper 1 - unused",
+          nodeId:       97,     // PRO4 packet ID
+          state:        0
+        },
+        {
+          name:         "Gripper 2 - unused",
+          nodeId:       98,     // PRO4 packet ID
+          state:        0
+        },
+        {
+          name:         "Gripper 3 - unused",
+          nodeId:       99,     // PRO4 packet ID
+          motorId:      0,      // device protocol ID, position in PRO4 payload
+          value:        0       // thrust value (-1 to +1)
+        }
+      ],
+      pro4:             {
+        pro4Sync:       pro4.constants.SYNC_REQUEST8LE,
+        pro4Addresses:  [99], // all updated to same value at same time
+        flags:          2,    // defined by VideoRay
+        csrAddress:     0,    // custom command address
+        len:            6
+      }
+    }
+
+    // Multicast motor control is the preferred method of operation to reduce 
+    // serial contention and latency
     //
-    // If multicast = 0, we send 1 PRO4 packet per nodeId per updateInterval
-    // 
     // motors array of objects description
     // name = common name of motor position on vehicle
     // nodeId = PRO4 header node ID
@@ -154,37 +186,43 @@ class Bridge extends EventEmitter
       time:             0,
       timeDelta_ms:     0,
       updateInterval:   100,    // loop interval in ms
-      multicast:        1,      // see above for description
+      rotateInterval:   5000,   // rotate motor responder every 5 seconds
+      responderIdx:     0,      // motor array index that will respond to requests
       motors:           [
         {
-          name:         "thruster",   // primary forward/reverse throttle
+          name:         "stern thruster",
           nodeId:       31,     // PRO4 packet ID
           motorId:      0,      // device protocol ID, position in PRO4 payload
-          value:        0       // thrust value (-1 to +1)
+          value:        0,      // thrust value (-1 to +1)
+          reverse:      false   // boolean
         },
         {
-          name:         "leftMotorAft",
-          nodeId:       32,     // PRO4 packet ID
+          name:         "aft side",
+          nodeId:       32,     // PRO4 packet IDar
           motorId:      1,      // device protocol ID, position in PRO4 payload
-          value:        0       // thrust value (-1 to +1)
+          value:        0,      // thrust value (-1 to +1)
+          reverse:      false   // boolean
         },
         {
-          name:         "leftMotorFore",
+          name:         "aft bottom",
           nodeId:       33,     // PRO4 packet ID
           motorId:      2,      // device protocol ID, position in PRO4 payload
-          value:        0       // thrust value (-1 to +1)
+          value:        0,      // thrust value (-1 to +1)
+          reverse:      false   // boolean
         },
         {
-          name:         "rightMotorAft",
+          name:         "fore side",
           nodeId:       34,     // PRO4 packet ID
           motorId:      3,      // device protocol ID, position in PRO4 payload
-          value:        0       // thrust value (-1 to +1)
+          value:        0,      // thrust value (-1 to +1)
+          reverse:      false   // boolean
         },
         {
-          name:         "rightMotorFore",
+          name:         "fore bottom",
           nodeId:       35,     // PRO4 packet ID
           motorId:      4,      // device protocol ID, position in PRO4 payload
-          value:        0       // thrust value (-1 to +1)
+          value:        0,      // thrust value (-1 to +1)
+          reverse:      false   // boolean
         }
       ],
       pro4:             {
@@ -192,7 +230,7 @@ class Bridge extends EventEmitter
         pro4Addresses:  [129],  // 0x81, multicast, see motors array above
         flags:          2,      // defined by VideoRay
         csrAddress:     0xf0,   // custom command address
-        len:            6 
+        len:            2+4*5   // 2 command bytes + 4 byte float * number of motors 
       }
     }
 
@@ -212,6 +250,7 @@ class Bridge extends EventEmitter
     // Add SCINI device control interval functions
     self.lightsInterval = setInterval( function() { return self.updateLights(); },       self.vehicleLights.updateInterval );
     self.motorInterval  = setInterval( function() { return self.updateMotors(); },     self.motorControl.updateInterval );
+    self.rotateMotorInterval = setInterval( function() { return self.rotateMotor(); },     self.motorControl.rotateInterval );
 
 
     // Connect to MQTT broker and setup all event handlers
@@ -541,46 +580,32 @@ class Bridge extends EventEmitter
       // Passthrough tests
       case 'example_to_foo': 
       {
+        break; // unused for now
         this.emitStatus('example_foo:' + parameters[0]);
         break;
       }
 
       case 'example_to_bar': 
       {
+        break; // unused for now
         this.emitStatus('example_bar:' + parameters[0]);
         break;
       }
 
       case 'gripper_open': 
       {
-        let pro4Sync = pro4.constants.SYNC_REQUEST8LE;
-        let pro4Address = 0x23; // default thruster group id
-        let flags = 2; // defined by VideoRay
-        let length = 6; // XXX
-
-        // 35 49 open = 3 close = 2 stationary = 0
         this.emitStatus('gripper_open:' + parameters[0]);
         break;
       }
 
       case 'gripper_close': 
       {
-        let pro4Sync = pro4.constants.SYNC_REQUEST8LE;
-        let pro4Address = 0x23; // default thruster group id
-        let flags = 2; // defined by VideoRay
-        let length = 6; // XXX
-
         this.emitStatus('gripper_close:' + parameters[0]);
         break;
       }
 
       case 'gripper_stationary': 
       {
-        let pro4Sync = pro4.constants.SYNC_REQUEST8LE;
-        let pro4Address = 0x23; // default thruster group id
-        let flags = 2; // defined by VideoRay
-        let length = 6; // XXX
-
         this.emitStatus('gripper_stationary:' + parameters[0]);
         break;
       }
@@ -621,67 +646,128 @@ class Bridge extends EventEmitter
         thrust *= scaleFactor;  
         thrust = Math.max(thrust,-0.65);
         thrust = Math.min(thrust, 0.65);
-        self.motorControl.thrust = thrust;
+
+        // Update state variable(s)
+        if (self.motorControl.motors[0].reverse == true) {
+          self.motorControl.motors[0].value = thrust * -1;          
+        }
+        else {
+          self.motorControl.motors[0].value = thrust;          
+        }
 
         // DEBUG: dump values sent by OpenROV
         logger.debug('Throttle value: ' + thrust);
-        
         // Ack command
-        setTimeout( function()
-        {
-          self.emitStatus('throttle: ' + thrust );
-        }, 250 );
-
+        self.emitStatus('throttle: ' + thrust );
         break;
       }
 
       case 'yaw':
       {
-        let pro4Sync = pro4.constants.SYNC_REQUEST32LE;
-        this.sendToMqtt ( command );
+        let yaw = parameters[0]; // must be converted to 32-bit IEEE 754 float in payload
+        let scaleFactor = 0.083;  // openrov caps throttle values at 12
+
+        // Scale and limit thrust between -0.65 and 0.65 (maximums are -1, 1)      
+        yaw *= scaleFactor;  
+        yaw = Math.max(yaw,-0.65);
+        yaw = Math.min(yaw, 0.65);
+
+        // Update state variable(s)
+        if (self.motorControl.motors[1].reverse == true) {
+          self.motorControl.motors[1].value = yaw * -1;          
+        }
+        else {
+          self.motorControl.motors[1].value = yaw;         
+        }
+        
         logger.debug('Sending yaw update: ' + command);
         // Ack command
-        this.emitStatus('yaw:' + parameters[0] );
+        self.emitStatus('yaw:' + parameters[0] );
         break;
       }
 
       case 'lift':
       {
-        let pro4Sync = pro4.constants.SYNC_REQUEST32LE;
-        this.sendToMqtt ( command );
+        let lift = parameters[0]; // must be converted to 32-bit IEEE 754 float in payload
+        let scaleFactor = 0.083;  // openrov caps throttle values at 12
+
+        // Scale and limit thrust between -0.65 and 0.65 (maximums are -1, 1)      
+        lift *= scaleFactor;  
+        lift = Math.max(lift,-0.65);
+        lift = Math.min(lift, 0.65);
+
+        // Update state variable(s)
+        if (self.motorControl.motors[2].reverse == true) {
+          self.motorControl.motors[2].value = lift * -1;          
+        }
+        else {
+          self.motorControl.motors[2].value = lift;         
+        }
+        if (self.motorControl.motors[4].reverse == true) {
+          self.motorControl.motors[4].value = lift * -1;          
+        }
+        else {
+          self.motorControl.motors[4].value = lift;         
+        }
+
         logger.debug('Sending lift update: ' + command);
         // Ack command
-        this.emitStatus('lift:' + parameters[0] );
+        self.emitStatus('lift:' + parameters[0] );
         break;
       }
 
       case 'pitch':
       {
-        let pro4Sync = pro4.constants.SYNC_REQUEST32LE;
-        this.sendToMqtt ( command );
+        let pitch = parameters[0]; // must be converted to 32-bit IEEE 754 float in payload
+        let scaleFactor = 0.083;  // openrov caps throttle values at 12
+
+        // Scale and limit thrust between -0.65 and 0.65 (maximums are -1, 1)      
+        pitch *= scaleFactor;  
+        pitch = Math.max(pitch,-0.65);
+        pitch = Math.min(pitch, 0.65);
+
+        // Update state variable(s)
+        if (self.motorControl.motors[4].reverse == true) {
+          self.motorControl.motors[4].value = pitch * -1;          
+        }
+        else {
+          self.motorControl.motors[4].value = pitch;         
+        }
+
         logger.debug('Sending pitch update: ' + command);
         // Ack command
-        this.emitStatus('pitch:' + parameters[0] );
-        break;
-      }
-
-      case 'roll':
-      {
-        let pro4Sync = pro4.constants.SYNC_REQUEST32LE;
-        this.sendToMqtt ( command );
-        logger.debug('Sending roll update: ' + command);
-        // Ack command
-        this.emitStatus('roll:' + parameters[0] );
+        self.emitStatus('pitch:' + parameters[0] );
         break;
       }
 
       case 'strafe':
-      {
-        let pro4Sync = pro4.constants.SYNC_REQUEST32LE;
-        this.sendToMqtt ( command );
+      { 
+
+        let strafe = parameters[0]; // must be converted to 32-bit IEEE 754 float in payload
+        let scaleFactor = 0.083;  // openrov caps throttle values at 12
+
+        // Scale and limit thrust between -0.65 and 0.65 (maximums are -1, 1)      
+        strafe *= scaleFactor;  
+        strafe = Math.max(strafe,-0.65);
+        strafe = Math.min(strafe, 0.65);
+
+        // Update state variable(s)
+        if (self.motorControl.motors[1].reverse == true) {
+          self.motorControl.motors[1].value = strafe * -1;          
+        }
+        else {
+          self.motorControl.motors[1].value = strafe;         
+        }
+        if (self.motorControl.motors[3].reverse == true) {
+          self.motorControl.motors[3].value = strafe * -1;          
+        }
+        else {
+          self.motorControl.motors[3].value = strafe;         
+        }
+        
         logger.debug('Sending strafe update: ' + command);
         // Ack command
-        this.emitStatus('strafe:' + parameters[0] );
+        self.emitStatus('strafe:' + parameters[0] );
         break;
       }
 
@@ -983,13 +1069,21 @@ class Bridge extends EventEmitter
     let m = this.motorControl.motors;
     let p = this.motorControl.pro4;
 
-    payload.writeUInt8(payloadCmd, 0);  // device command for motor control
-    if (this.motorControl.multicast) {
-      packetBuf = self.parser.encode(p.pro4Sync, m[j].nodeId, p.flags, p.csrAddress, p.len, payload);
+    payload.writeUInt8(p.payloadCmd, 0);  // device command for motor control
+    payload.writeUInt8(m[self.motorControl.responderIdx].nodeId, 1);   // node ID of device to respond
+
+    if (p.pro4Addresses[0] & pro4.constants.ID_MULTICAST_FLAG) {
+      // build payload from motor state object
+      for (let i = 0; i < m.length; i++) {
+        payload.writeFloatLE(m[i].value, 2+4*i);
+      }
+      // first address in array is a multicast group
+      packetBuf = self.parser.encode(p.pro4Sync, p.pro4Addresses[0], p.flags, p.csrAddress, p.len, payload);
       // maintain state by updating at least once per second
       self.sendToMqtt(packetBuf);
     }
     else {
+      // first address in array is not multicast
       // Generate new pro4 packet for each address and send to all motor modules
       for (let i = 0; i < m.length; i++) {
         (function() {
@@ -1001,15 +1095,82 @@ class Bridge extends EventEmitter
         })();
       }
     }
-    payload.writeUInt8(motorId, 1);     // motor ID we want to respond. should rotate
 
-    for (let x = 0; y <  m.length; x++) {
+    let x, y;
+    for (x = 0; y <  m.length; x++) {
       payload.writeFloatLE(thrust, 2);    
     }
 
     // Emit status update
     // this.emit( 'status', this.parseStatus( result ) );
     //this.emit( 'status', this.parseStatus( result ) );
+  }
+
+  rotateMotor()
+  {
+    let self = this;
+
+    if (self.motorControl.responderIdx >= m.length 
+        || self.motorControl.responderIdx < 0) {
+          self.motorControl.responderIdx = 0;
+    }
+    else
+      self.motorControl.responderIdx++;
+  }
+
+  updateGrippers()
+  {
+    let self = this;
+    let packetBuf;
+    
+    // Update time
+    this.gripperControl.time += this.gripperControl.timeDelta_ms;
+
+    // Sent as first two bytes of payload
+    let payloadCmd = 0x4935;
+
+    // convert OpenROV target thrust to 32-bit LE floats and build payload
+    let payload = new Buffer.allocUnsafe(this.gripperControl.pro4.len);
+    
+    // shorter names for easier reading
+    let g = this.gripperControl.grippers;
+    let p = this.gripperControl.pro4;
+
+    payload.writeUInt16LE(p.payloadCmd, 0);  // device command for motor control
+    payload.writeUInt8(g[0].state, 2);   // node ID of device to respond
+/*
+    if (p.pro4Addresses[0] & pro4.constants.ID_MULTICAST_FLAG) {
+      // build payload from motor state object
+      for (let i = 0; i < m.length; i++) {
+        payload.writeFloatLE(m[i].value, 2+4*i);
+      }
+      // first address in array is a multicast group
+      packetBuf = self.parser.encode(p.pro4Sync, p.pro4Addresses[0], p.flags, p.csrAddress, p.len, payload);
+      // maintain state by updating at least once per second
+      self.sendToMqtt(packetBuf);
+    }
+    else {
+      // first address in array is not multicast
+      // Generate new pro4 packet for each address and send to all motor modules
+      for (let i = 0; i < m.length; i++) {
+        (function() {
+          let j = i;  // loop closure
+          // Packet len = Header + 4-byte CRC + payload + 4-byte CRC = 27
+          packetBuf = self.parser.encode(p.pro4Sync, m[j].nodeId, p.flags, p.csrAddress, p.len, payload);
+          // maintain light state by updating at least once per second
+          self.sendToMqtt(packetBuf);
+        })();
+      }
+    }
+    payload.writeUInt8(m.motorId, 1);     // motor ID we want to respond. should rotate
+
+    let x, y;
+    for (x = 0; y <  m.length; x++) {
+      payload.writeFloatLE(thrust, 2);    
+    }
+    */
+    logger.debug('Received gripper command, not used.');
+
   }
 }
 
