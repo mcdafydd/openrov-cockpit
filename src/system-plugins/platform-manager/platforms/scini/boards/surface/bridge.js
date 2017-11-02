@@ -1110,8 +1110,8 @@ class Bridge extends EventEmitter
   {
     let self = this;
 
-    if (self.motorControl.responderIdx >= m.length 
-        || self.motorControl.responderIdx < 0) {
+    if (self.motorControl.responderIdx >= self.motorControl.motors.length || 
+        self.motorControl.responderIdx < 0) {
           self.motorControl.responderIdx = 0;
     }
     else
