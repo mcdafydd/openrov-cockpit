@@ -49,6 +49,9 @@
     deps.cockpit.on('plugin.rovpilot.rates.setPitch', function (value) {
       self.positions.pitch = value;
     });
+    deps.cockpit.on('plugin.rovpilot.rates.setStrafe', function (value) {
+      self.positions.strafe = value;
+    });
     deps.cockpit.on('plugin.rovpilot.rates.setRoll', function (value) {
       self.positions.roll = value;
     });

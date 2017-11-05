@@ -66,73 +66,76 @@ class Bridge extends EventEmitter
     this.client = {};
     this.mqttUri = 'ws://' + mqttBrokerIp + ':3000';
     this.parser = new pro4.Pro4();
-    
-    // Controllerboard State - emits to telemetry plugin?
-    this.cb = 
-    {
-      time:         0,
-      timeDelta_ms: 1000,
-
-      brdvRampUp:   true,
-      brdv:         5.0,
-      vout:         5.0,
-      iout:         2.0,
-      bt1i:         0.0,
-      bt2i:         0.0,
-      baro_p:       0,
-      baro_t:       0.0
-    }
-
-    // IMU State
-    this.imu = 
-    {
-      time:         0,
-      timeDelta_ms: 10,
-
-      mode:         0,    // 0: GYRO, 1:MAG
-      roll:         0,
-      rollOffset:   0,
-      pitch:        0,
-      pitchOffset:  0,
-      yaw:          0,
-      yawOffset:    0,
-      heading:      0
-    }
-
-    // Depth sensor state
-    this.depthSensor =
-    {
-      time:         0,
-      timeDelta_ms: 50,
-
-      waterType:    0,  // 0: Fresh, 1: Salt
-      depth:        0,
-      depthOffset:  0,
-      temperature:  0,
-      pressure:     0
-    }
-
-    this.barometer = {
-      temperature: 0,
-      pressure:    0
-    }
 
     this.depthHoldEnabled   = false;
     this.targetHoldEnabled  = false;
     this.laserEnabled       = false;
 
-    // **************** SCINI specific platform hardware state ******************
+    // *********** SCINI specific platform hardware request state *************
+    this.sensors = {
+      time:             0,
+      timeDelta_ms:     0,
+      updateInterval:   1000,       // loop interval in ms
+      ps:               {           // power supply
+        brdvRampUp:   true,
+        brdv:         5.0,
+        vout:         5.0,
+        iout:         2.0,
+        bt1i:         0.0,
+        bt2i:         0.0,
+        baro_p:       0,
+        baro_t:       0.0
+      },
+      imu:              {
+        mode:         0,            // 0: GYRO, 1:MAG
+        roll:         0,
+        rollOffset:   0,
+        pitch:        0,
+        pitchOffset:  0,
+        yaw:          0,
+        yawOffset:    0,
+        heading:      0
+      },
+      depth:            {
+        waterType:    0,            // 0: Fresh, 1: Salt
+        depth:        0,
+        depthOffset:  0,
+        temp:  0,
+        pressure:     0  
+      },
+      barometer:        {           // XXX - do we need this?
+        temp:         0,
+        pressure:     0
+      },
+      pro4:             {
+        pro4Sync:       pro4.constants.SYNC_REQUEST8LE,
+        pro4Addresses:  [31],       // XXX - set these correctly
+        flags:          0x80,
+        csrAddress:     0xf0,       // custom command address
+        lenNoop:        6,          // no write, just read all values
+        lenBam:         11,         // send write to control servos, GPIOs
+        payloadHeader:  0x53434e49, // "SCNI" - beginning of request payloads
+        payloadLenNoop: 2,          // no write, just read all values
+        payloadLenBam:  6,          // send write to control servos, GPIOs
+        payloadCmdNoop: 0,          // no write, just read all values
+        payloadCmdBam:  0x10,       // send write to control servos, GPIOs
+        payloadServo1:  0x8000,     // 2 byte servo 1 angle
+        payloadServo2:  0x8000,     // 2 byte servo 2 angle
+        payloadGpio:    0           // 1 byte output bits
+      }
+    }
+
     this.vehicleLights = {
       time:             0,
       timeDelta_ms:     0,
-      updateInterval:   700,  // loop interval in ms
-      power:            0,    // 0 to 1
+      updateInterval:   700,        // loop interval in ms
+      power:            0,          // 0 to 1
       pro4:             {
         pro4Sync:       pro4.constants.SYNC_REQUEST32LE,
-        pro4Addresses:  [61, 62, 63, 64], // all updated to same value at same time
-        flags:          2,    // defined by VideoRay
-        csrAddress:     0,    // custom command address
-        len:            4 * 3 // 3 led banks
+        pro4Addresses:  [61, 62, 63, 64], // all updated at same time
+        flags:          2,          // defined by VideoRay
+        csrAddress:     0,          // custom command address
+        len:            4 * 3       // 3 led banks
       }
     }
 
@@ -148,24 +151,24 @@ class Bridge extends EventEmitter
       grippers:         [
         {
           name:         "Gripper 1 - unused",
-          nodeId:       97,     // PRO4 packet ID
+          nodeId:       97,   // PRO4 packet ID
           state:        0
         },
         {
           name:         "Gripper 2 - unused",
-          nodeId:       98,     // PRO4 packet ID
+          nodeId:       98,   // PRO4 packet ID
           state:        0
         },
         {
           name:         "Gripper 3 - unused",
-          nodeId:       99,     // PRO4 packet ID
-          motorId:      0,      // device protocol ID, position in PRO4 payload
-          value:        0       // thrust value (-1 to +1)
+          nodeId:       99,   // PRO4 packet ID
+          motorId:      0,    // device protocol ID, position in PRO4 payload
+          value:        0     // thrust value (-1 to +1)
         }
       ],
       pro4:             {
         pro4Sync:       pro4.constants.SYNC_REQUEST8LE,
-        pro4Addresses:  [99], // all updated to same value at same time
+        pro4Addresses:  [99], // XXX - set these correctly
         flags:          2,    // defined by VideoRay
         csrAddress:     0,    // custom command address
         len:            6
@@ -230,7 +233,8 @@ class Bridge extends EventEmitter
         pro4Addresses:  [129],  // 0x81, multicast, see motors array above
         flags:          2,      // defined by VideoRay
         csrAddress:     0xf0,   // custom command address
-        len:            2+4*5   // 2 command bytes + 4 byte float * number of motors 
+        len:            2+4*5,   // 2 command bytes + 4 byte float * number of motors
+        payloadCmd:     0xaa   // defined by VideoRay 
       }
     }
 
@@ -242,15 +246,13 @@ class Bridge extends EventEmitter
     
     logger.debug('BRIDGE: Starting connect() to MQTT broker');
 
-    // Add status interval functions
-    self.imuInterval    = setInterval( function() { return self.updateIMU; },          self.imu.timeDelta_ms );
-    self.depthInterval  = setInterval( function() { return self.updateDepthSensor; },  self.depthsensortimeDelta_ms );
-    self.cbInterval     = setInterval( function() { return self.updateCB; },           self.cb.timeDelta_ms );
-
     // Add SCINI device control interval functions
+    self.sensorInterval = setInterval( function() { return self.requestSensors(); },          self.sensors.updateInterval );
     self.lightsInterval = setInterval( function() { return self.updateLights(); },       self.vehicleLights.updateInterval );
-    self.motorInterval  = setInterval( function() { return self.updateMotors(); },     self.motorControl.updateInterval );
+    self.motorInterval = setInterval( function() { return self.updateMotors(); },     self.motorControl.updateInterval );
     self.rotateMotorInterval = setInterval( function() { return self.rotateMotor(); },     self.motorControl.rotateInterval );
+    // XXX - grippers unused at the moment, left in case need to change
+    // self.gripperInterval = setInterval( function() { return self.updateGrippers(); },     self.gripperControl.updateInterval );
 
 
     // Connect to MQTT broker and setup all event handlers
@@ -373,8 +375,8 @@ class Bridge extends EventEmitter
 
       case 'imu_mode':
       {
-         this.imu.mode = parseInt( parameters[0] );
-         this.emitStatus(`imu_mode:${this.imu.mode};`);
+         this.sensors.imu.mode = parseInt( parameters[0] );
+         this.emitStatus(`imu_mode:${this.sensors.imu.mode};`);
 
          break;
       }
@@ -382,11 +384,11 @@ class Bridge extends EventEmitter
       case 'imu_level':
       {
           // Echo back requested settings
-          this.imu.rollOffset = this.decode( parseInt( parameters[0] ) );
-          this.emitStatus("imu_roff:" + this.encode( this.imu.rollOffset ) + ";" );
+          this.sensors.imu.rollOffset = this.decode( parseInt( parameters[0] ) );
+          this.emitStatus("imu_roff:" + this.encode( this.sensors.imu.rollOffset ) + ";" );
 
-          this.imu.pitchOffset = this.decode( parseInt( parameters[1] ) );
-          this.emitStatus("imu_poff:" + this.encode( this.imu.pitchOffset ) + ";" );
+          this.sensors.imu.pitchOffset = this.decode( parseInt( parameters[1] ) );
+          this.emitStatus("imu_poff:" + this.encode( this.sensors.imu.pitchOffset ) + ";" );
 
           break;
       }
@@ -394,7 +396,7 @@ class Bridge extends EventEmitter
       case 'imu_zyaw':
       {
           // Set the current heading as the offset
-          this.imu.yawOffset = this.imu.yaw;
+          this.sensors.imu.yawOffset = this.sensors.imu.yaw;
           this.emitStatus(`imu_zyaw:ack;`);
 
           break;
@@ -403,7 +405,7 @@ class Bridge extends EventEmitter
       case 'depth_zero':
       {
           // Set the current depth as the offset
-          this.depthsensordepthOffset = this.depthsensordepth;
+          this.sensors.depth.depthOffset = this.sensors.depth.depth;
           this.emitStatus(`depth_zero:ack;`);
 
           break;
@@ -412,7 +414,7 @@ class Bridge extends EventEmitter
       case 'depth_clroff':
       {
           // Set the depth offset to 0
-          this.depthsensordepthOffset = 0;
+          this.sensors.depth.depthOffset = 0;
           this.emitStatus(`depth_clroff:ack;`);
 
           break;
@@ -420,8 +422,8 @@ class Bridge extends EventEmitter
 
       case 'depth_water':
       {
-          this.depthsensorwaterType = parseInt( parameters[0] );
-          this.emitStatus(`depth_water:${this.depthsensorwaterType};`);
+          this.sensors.depth.waterType = parseInt( parameters[0] );
+          this.emitStatus(`depth_water:${this.sensors.depth.waterType};`);
 
           break;
       }
@@ -574,21 +576,6 @@ class Bridge extends EventEmitter
         this.targetHoldEnabled = false;
         this.emitStatus('targetHeading:' + (this.targetHoldEnabled ? targetHeading.toString() : DISABLED));
         logger.debug('Heading hold disabled');
-        break;
-      }
-
-      // Passthrough tests
-      case 'example_to_foo': 
-      {
-        break; // unused for now
-        this.emitStatus('example_foo:' + parameters[0]);
-        break;
-      }
-
-      case 'example_to_bar': 
-      {
-        break; // unused for now
-        this.emitStatus('example_bar:' + parameters[0]);
         break;
       }
 
@@ -877,132 +864,6 @@ class Bridge extends EventEmitter
     return ((a > 180.0) ? (a - 360.0) : ((a < -180.0) ? (a + 360.0) : a));
   }
 
-  updateIMU()
-  {
-    // Update time
-    this.imu.time += this.imu.timeDelta_ms;
-
-    // Generate pitch -90:90 degrees
-    this.imu.pitch = 90 * Math.sin( this.imu.time * ( Math.PI / 10000 ) );
-    
-    // Generate roll -90:90 degrees
-    this.imu.roll = 90 * Math.sin( this.imu.time * ( Math.PI / 30000 ) );
-    
-    // Generate yaw between -120:120 degrees
-    let baseYaw = 120 * Math.sin( this.imu.time * ( Math.PI / 10000 ) );
-
-    // Handle mode switches (gyro mode is -180:180, mag mode is 0:360)
-    if( this.imu.mode === 0 )
-    {
-      this.imu.yaw = baseYaw;
-    }
-    else if( this.imu.mode === 1 )
-    {
-      this.imu.yaw = normalizeAngle360( baseYaw );
-    }
-
-    // Create result string
-    let result = "";
-    result += 'imu_p:' + this.encode( this.imu.pitch - this.imu.pitchOffset ) + ';';
-    result += 'imu_r:' + this.encode( this.imu.roll - this.imu.rollOffset )+ ';';
-
-    // Handle imu mode for yaw/heading
-    if( this.imu.mode === 0 )
-    {
-      // GYRO mode
-      result += 'imu_y:' + this.encode( normalizeAngle180( this.imu.yaw - this.imu.yawOffset ) ) + ';';
-    }
-    else if( this.imu.mode === 1 )
-    {
-      // MAG mode
-      result += 'imu_y:' + this.encode( this.imu.yaw ) + ';';
-    }
-
-    // Emit status update
-    this.emit( 'status', this.parseStatus( result ) );
-  }
-
-  updateDepthSensor()
-  {
-    // Update time
-    this.depthsensortime += this.depthsensortimeDelta_ms;
-
-    // Generate depth from -10:10 meters
-    this.depthsensordepth = 10 * Math.sin( this.depthsensortime * ( Math.PI / 20000 ) );
-
-    // Generate temperature from 15:25 degrees
-    this.depthsensortemperature = 20 + ( 5 * Math.sin( this.depthsensortime * ( Math.PI / 40000 ) ) );
-
-    // Generate pressure from 50:70 kPa
-    this.depthsensorpressure = 60 + ( 10 * Math.sin( this.depthsensortime * ( Math.PI / 40000 ) ) );
-
-    // Create result string (Note: we don't bother to take into account water type or offsets w.r.t. temperature or pressure )
-
-    let result = "";
-    result += 'depth_d:' + this.encode( this.depthsensordepth - this.depthsensordepthOffset ) + ';';
-    result += 'depth_t:' + this.encode( this.depthsensortemperature ) + ';';
-    result += 'depth_p:' + this.encode( this.depthsensorpressure ) + ';';
-
-    // Emit status update
-    this.emit( 'status', parseStatus( result ) );
-  }
-
-  updateCB()
-  {
-    // Update time
-    this.cb.time += this.cb.timeDelta_ms;
-
-    // Generate a current baseline from 1:2 amps
-    let currentBase = ( ( Math.random() * 1 ) + 1 );
-
-    // Generate currents for each battery tube from the base current, deviation of +/- 0.2A
-    this.cb.bt1i = currentBase + ( ( Math.random() * 0.4 ) - 0.2 );
-    this.cb.bt2i = currentBase + ( ( Math.random() * 0.4 ) - 0.2 );
-
-    // Get total current by adding the two tube currents
-    this.cb.iout = this.cb.bt1i + this.cb.bt2i;
-
-    // Generate board voltage (ramps up and down between 5V and 12V)
-    if( this.cb.brdvRampUp )
-    {
-      this.cb.brdv += 0.5;
-      if( this.cb.brdv >= 12 )
-      {
-        this.cb.brdvRampUp = false;
-      }
-    }
-    else
-    {
-      this.cb.brdv -= 0.5;
-      if( this.cb.brdv <= 5 )
-      {
-        this.cb.brdvRampUp = true;
-      }
-    }
-
-    this.cb.vout = this.cb.brdv;
-
-    //Generate internal pressure values
-    this.cb.baro_p = 30000000;
-    let num = Math.floor(Math.random()*1000000) + 1; // this will get a number between 1 and 99;
-    num *= Math.floor(Math.random()*2) == 1 ? 1 : -1; // this will add minus sign in 50% of cases
-    this.cb.baro_p += num;
-
-    // Create result string
-    let result = "";
-    result += 'BT2I:' + this.cb.bt2i + ';';
-    result += 'BT1I:' + this.cb.bt1i + ';';
-    result += 'BRDV:' + this.cb.brdv + ';';
-    result += 'vout:' + this.cb.vout + ';';
-    result += 'iout:' + this.cb.iout + ';';
-    result += 'time:' + this.cb.time + ';';
-    result += 'baro_p:' + this.cb.baro_p + ';';
-    result += 'baro_t:' + this.cb.baro_t + ';';
-
-    // Emit status update
-    this.emit( 'status', this.parseStatus( result ) );
-  }
-
   // ****** SCINI specific device update functions ******
   updateLights()
   {
@@ -1120,6 +981,7 @@ class Bridge extends EventEmitter
 
   updateGrippers()
   {
+    // XXX - grippers not being used at the moment so this function is incomplete
     let self = this;
     let packetBuf;
     
@@ -1172,6 +1034,146 @@ class Bridge extends EventEmitter
     logger.debug('Received gripper command, not used.');
 
   }
+}
+
+// send crumb644 sensor request
+requestSensors()
+{
+  let self = this;
+  let type = 'NOOP';  // 'NOOP' (read all) or 'set' (servos, GPIOs)
+  
+  // shorter name for easier reading
+  let p = self.sensors.pro4;
+
+  // Update time -- fix this to only set in request or response for all 
+  // intervals
+  self.sensors.time += self.sensors.timeDelta_ms;
+  
+  let payload = new Buffer.allocUnsafe(self.sensors.pro4.lenNoop);
+  payload.writeFloatBE(p.payloadHeader, 0);  // "SCNI"
+  payload.writeUInt8(p.payloadLenNoop, 4); // payload len
+  payload.writeUInt8(p.payloadCmdNoop, 5); // payload cmd
+
+  // Generate new pro4 packet for each address and send to all light modules
+  for (let i = 0; i < p.pro4Addresses.length; i++) {
+    (function() {
+      let j = i;  // loop closure
+      // Packet len = Header + 1-byte CRC + payload + 1-byte CRC = 14
+      let packetBuf = self.parser.encode(p.pro4Sync, p.pro4Addresses[j], p.flags, p.csrAddress, p.lenNoop, payload);
+      // maintain light state by updating at least once per second
+      self.sendToMqtt(packetBuf);
+    })();
+  }
+
+  logger.debug('Sent Crumb644 ' + type + ' request');
+}
+
+// Updates power supply values, IMU, depth sensors, etc. after request
+updateSensors()
+{
+// Update time
+this.sensors.time += this.sensors.timeDelta_ms;
+
+    // Generate pitch -90:90 degrees
+    this.sensors.imu.pitch = 90 * Math.sin( this.sensors.time * ( Math.PI / 10000 ) );
+    
+    // Generate roll -90:90 degrees
+    this.sensors.imu.roll = 90 * Math.sin( this.sensors.time * ( Math.PI / 30000 ) );
+    
+    // Generate yaw between -120:120 degrees
+    let baseYaw = 120 * Math.sin( this.sensors.time * ( Math.PI / 10000 ) );
+
+    // Handle mode switches (gyro mode is -180:180, mag mode is 0:360)
+    if( this.sensors.imu.mode === 0 )
+    {
+      this.sensors.imu.yaw = baseYaw;
+    }
+    else if( this.sensors.imu.mode === 1 )
+    {
+      this.sensors.imu.yaw = normalizeAngle360( baseYaw );
+    }
+
+    // Create result string
+    let result = "";
+    result += 'imu_p:' + this.encode( this.sensors.imu.pitch - this.sensors.imu.pitchOffset ) + ';';
+    result += 'imu_r:' + this.encode( this.sensors.imu.roll - this.sensors.imu.rollOffset )+ ';';
+
+    // Handle imu mode for yaw/heading
+    if( this.sensors.imu.mode === 0 )
+    {
+      // GYRO mode
+      result += 'imu_y:' + this.encode( normalizeAngle180( this.sensors.imu.yaw - this.sensors.imu.yawOffset ) ) + ';';
+    }
+    else if( this.sensors.imu.mode === 1 )
+    {
+      // MAG mode
+      result += 'imu_y:' + this.encode( this.sensors.imu.yaw ) + ';';
+    }
+
+    // DEPTH
+    // Generate depth from -10:10 meters
+    this.sensors.depth.depth = 10 * Math.sin( this.sensors.time * ( Math.PI / 20000 ) );
+
+    // Generate temperature from 15:25 degrees
+    this.sensors.depth.temp = 20 + ( 5 * Math.sin( this.sensors.time * ( Math.PI / 40000 ) ) );
+
+    // Generate pressure from 50:70 kPa
+    this.sensors.depth.pressure = 60 + ( 10 * Math.sin( this.sensors.time * ( Math.PI / 40000 ) ) );
+
+    // Create result string (Note: we don't bother to take into account water type or offsets w.r.t. temperature or pressure )
+
+    result = "";
+    result += 'depth_d:' + this.encode( this.sensors.depth.depth - this.sensors.depth.depthOffset ) + ';';
+    result += 'depth_t:' + this.encode( this.sensors.depth.temp ) + ';';
+    result += 'depth_p:' + this.encode( this.sensors.depth.pressure ) + ';';
+
+    // Power Supplies
+    // Generate a current baseline from 1:2 amps
+    let currentBase = ( ( Math.random() * 1 ) + 1 );
+
+    // Generate currents for each battery tube from the base current, deviation of +/- 0.2A
+    this.sensors.ps.bt1i = currentBase + ( ( Math.random() * 0.4 ) - 0.2 );
+    this.sensors.ps.bt2i = currentBase + ( ( Math.random() * 0.4 ) - 0.2 );
+
+    // Get total current by adding the two tube currents
+    this.sensors.ps.iout = this.sensors.ps.bt1i + this.sensors.ps.bt2i;
+
+    // Generate board voltage (ramps up and down between 5V and 12V)
+    if( this.sensors.ps.brdvRampUp )
+    {
+      this.sensors.ps.brdv += 0.5;
+      if( this.sensors.ps.brdv >= 12 )
+      {
+        this.sensors.ps.brdvRampUp = false;
+      }
+    }
+    else
+    {
+      this.sensors.ps.brdv -= 0.5;
+      if( this.sensors.ps.brdv <= 5 )
+      {
+        this.sensors.ps.brdvRampUp = true;
+      }
+    }
+
+    this.sensors.ps.vout = this.sensors.ps.brdv;
+
+    //Generate internal pressure values
+    this.sensors.ps.baro_p = 30000000;
+    let num = Math.floor(Math.random()*1000000) + 1; // this will get a number between 1 and 99;
+    num *= Math.floor(Math.random()*2) == 1 ? 1 : -1; // this will add minus sign in 50% of cases
+    this.sensors.ps.baro_p += num;
+
+    // Create result string
+    result = "";
+    result += 'BT2I:' + this.sensors.ps.bt2i + ';';
+    result += 'BT1I:' + this.sensors.ps.bt1i + ';';
+    result += 'BRDV:' + this.sensors.ps.brdv + ';';
+    result += 'vout:' + this.sensors.ps.vout + ';';
+    result += 'iout:' + this.sensors.ps.iout + ';';
+    result += 'time:' + this.sensors.ps.time + ';';
+    result += 'baro_p:' + this.sensors.ps.baro_p + ';';
+    result += 'baro_t:' + this.sensors.ps.baro_t + ';';
 }
 
 module.exports = Bridge;

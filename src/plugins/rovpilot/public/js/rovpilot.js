@@ -327,17 +327,7 @@
                               }
                             } 
                           },
-          "RIGHT_STICK_Y": { type: "axis",
-                            action: 'rovPilot.moveLift',
-                            options: {
-                              inverted: false,
-                              exponentialSticks: {
-                                enabled: false,
-                                rate: 1.0
-                              }
-                            } 
-                          },
-          "LB": { type: "button",
+          "RIGHT_TRIGGER": { type: "button",
                             action: 'rovPilot.decrementPowerLevel'
           },
           "RB": { type: "button",
