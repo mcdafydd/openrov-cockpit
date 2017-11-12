@@ -31,9 +31,10 @@
   POSSIBILITY OF SUCH DAMAGE.
 */
 
-const logger = require('AppFramework.js').logger;
-const Parser = require('binary-parser').Parser;
-const CRC    = require('crc');
+const logger        = require('AppFramework.js').logger;
+const Parser        = require('binary-parser').Parser;
+const CRC           = require('crc');
+const pro4Payloads  = require('./pro4Payloads');
 
 // ******************************************************************
 //  Device types are defined by VideoRay
@@ -68,6 +69,10 @@ const constants = {
   PROTOCOL_PRO4_RESPONSE_DATA_PAYLOAD_START_INDEX: 8,
   SYNC_REQUEST8LE: 0xAFFA,  // CRCs are one byte
   SYNC_REQUEST32LE: 0x5FF5,  // CRCs are four bytes
+  SYNC_REQUEST8BE: 0xFAAF,  // CRCs are one byte
+  SYNC_REQUEST32BE: 0xF55F,  // CRCs are four bytes
+  SYNC_RESPONSE8LE: 0xDFFD,  // parsed endianness, CRCs one byte
+  SYNC_RESPONSE32LE: 0x0FF0,  // parsed endianness, CRCs four bytes
   SYNC_RESPONSE8BE: 0xFDDF,  // parsed endianness, CRCs one byte
   SYNC_RESPONSE32BE: 0xF00F,  // parsed endianness, CRCs four bytes
   ID_BROADCAST: 0xFF,
@@ -92,6 +97,10 @@ class Pro4
   constructor()
   {
     this.constants = constants;
+
+    // stop parser to terminate parsing
+    this.stop = new Parser();
+
     // Define a parser for the board information stored on the controller board's eeprom
     this.ParserCrc8 = new Parser()
       .endianess('little')
@@ -113,23 +122,82 @@ class Pro4
       .endianess('little')
       .uint16('sync', {
         assert: function(x) {
-          return x === this.SYNC_REQUEST8LE || x === this.SYNC_REQUEST32LE;
-        }
+          // 'this' context not accessible here
+          // matches SYNC_REQUEST8LE or SYNC_REQUEST32LE or "mqttClientConnected"
+          if (!(x === 0xdffd || x === 0x0ff0 || x === 29037)) {
+              logger.warn('PRO4: Partial or non-PRO4 packet sent to parser');
+          } 
+          return true; // always return true to prevent interruption
+        } 
       })
       .choice('crcType', {
         tag: 'sync',
         choices: {
-          // 0xfddf response
-          64991: Parser.start().nest('crc8', { type: this.ParserCrc8 }),
-          // 0xf00f response
-          61455: Parser.start().nest('crc32', { type: this.ParserCrc32 }),
+          // 0xfddf response (arrives as 0xdffd)
+          57341: Parser.start().nest('crc8', { type: this.ParserCrc8 }),
+          // 0xf00f response (arrives as 0x0ff0)
+          4080: Parser.start().nest('crc32', { type: this.ParserCrc32 }),
+          // client joined - publishes mqttClientConnected
+          29037: this.stop
         }
       })
+
+    // VideoRay PRO4 thruster response payload
+    this.ParserMotors = new Parser()
+      .endianess('little')
+      .float('rpm')
+      .float('bus_v')
+      .float('bus_i')
+      .float('temp')
+      .uint8('fault');
+
+    // VideoRay PRO4 light module response payload
+    this.ParserLights = new Parser()
+      .endianess('little')
+      .uint8('deviceType')
+      .float('bus_v')
+      .float('bus_i')
+      .float('temp')
+      .uint8('fault');
+
+    // SCINI crumb644 PRO4 response payload
+    this.ParserBam = new Parser()
+      .string('scni', { length: 4 })
+      .uint8('len')
+      .uint8('cmd')
+      .uint16le('servo1')
+      .uint16le('servo2')
+      .uint8('gpioOut')
+      .uint8('gpioIn')
+      .array('acs764', {
+        type: 'floatle',
+        length: 4
+      })
+      .array('tmp102', {
+        type: 'floatle',
+        length: 4
+      })
+      .array('adcKelvin', {
+        type: 'floatle',
+        length: 2
+      })
+      .array('adcVolts', {
+        type: 'floatle',
+        length: 3
+      })
+      .floatle('adc48v')      
+      .floatle('adc24v')      
+      .floatle('adc12v')            
+      .floatle('kellerTemperature')      
+      .floatle('kellerPressure')
+      .uint8('kellerStatus');
   }
 
   // Encode PRO4 request and calculate checksum
   encode(sync, id, flags, csrAddress, len, payload)
   {
+    // to hold 1-byte checksums
+    let chksum = 0;
     // assume 1-byte CRC message, parser errors on invalid sync bytes
     let padding = 1;
 
@@ -138,7 +206,8 @@ class Pro4
     }
 
     // Create PRO4 packet
-    let skip = this.constants.PROTOCOL_PRO4_HEADER_SIZE + padding + len;
+    let headerLen = this.constants.PROTOCOL_PRO4_HEADER_SIZE + padding;
+    let skip = headerLen + len;
     let buf = new Buffer.allocUnsafe(skip + padding);
     buf.writeUInt16LE(sync, 0);
     buf.writeUInt8(id, 2);
@@ -147,19 +216,30 @@ class Pro4
     buf.writeUInt8(len, 5);
     // Write header checksum
     if (sync === this.constants.SYNC_REQUEST32LE) {
-      buf.writeUInt32LE(CRC.crc32(buf.slice(0,6)), this.constants.PROTOCOL_PRO4_HEADER_SIZE+1);
+      buf.writeUInt32LE(CRC.crc32(buf.slice(0,6)), this.constants.PROTOCOL_PRO4_HEADER_SIZE);
     }
     if (sync === this.constants.SYNC_REQUEST8LE) {
-      buf.writeUInt8(CRC.crc8(buf.slice(0,6)), 
-        this.constants.PROTOCOL_PRO4_HEADER_SIZE+1);
+      chksum = buf[0] ^ buf[1];
+      for (let i = 2; i < this.constants.PROTOCOL_PRO4_HEADER_SIZE; i++) {
+        chksum ^= buf[i];
+      }
+      buf.writeUInt8(chksum, this.constants.PROTOCOL_PRO4_HEADER_SIZE);
+      logger.debug('DEBUG: My crc8 total = ' + chksum.toString(16));; 
     }
-    payload.copy(buf, this.constants.PROTOCOL_PRO4_HEADER_SIZE + padding, 0);
+
+    payload.copy(buf, headerLen);
+
     // Write total checksum
     if (sync === this.constants.SYNC_REQUEST32LE) {
-      buf.writeUInt32LE(CRC.crc32(buf.slice(0,skip)), skip);
+      buf.writeUInt32LE(CRC.crc32(buf.slice(headerLen, skip)), skip);
     }
     if (sync === this.constants.SYNC_REQUEST8LE) {
-      buf.writeUInt8(CRC.crc8(buf.slice(0,skip)), skip);
+      chksum = buf[7] ^ buf[8];
+      for (let i = 9; i < skip; i++) {
+        chksum ^= buf[i];
+      }
+      buf.writeUInt8(chksum, skip);
+      logger.debug('DEBUG: My crc8 total = ' + chksum.toString(16));
     }
 
     logger.debug('BRIDGE: Debug PRO4 request = ' + buf.toString('hex'))
@@ -169,55 +249,96 @@ class Pro4
   // Parse PRO4 response and validate checksum
   decode(data)
   {
+    let self = this;
     let retVal;
     // parsed objects are big endian
-    let obj = this.ParserHead(data);
+    let obj = self.ParserHead.parse(data);
+    let chksum = 0;
     let headerCrcPass = true;
     let totalCrcPass = true;
     let padding = 1;
     
 
-    if (obj.sync === this.constants.SYNC_RESPONSE32BE) {
+    if (obj.sync === self.constants.SYNC_RESPONSE32BE) {
       padding = 4;
     }
-    let end = this.constants.PROTOCOL_PRO4_HEADER_SIZE + padding + obj.len;
+    
+    let headerLen = this.constants.PROTOCOL_PRO4_HEADER_SIZE + padding;
+    let payloadLen = data.length - headerLen - padding;
     
     // validate header CRC
-    if (obj.sync == this.constants.SYNC_RESPONSE32BE) {
-      if (obj.headerCrc !== CRC.crc32(data.slice(0,6))) {
+    if (obj.sync == self.constants.SYNC_RESPONSE32BE) {
+      if (obj.crcType.crc32.headerCrc !== CRC.crc32(data.slice(0,6))) {
         headerCrcPass = false;
-        logger.warn('BRIDGE: Bad header crc possible id = ' + obj.id);
+        logger.warn('BRIDGE: Bad header crc; possible id = ' + obj.crcType.crc32.id);
       }
     }
     if (obj.sync == this.constants.SYNC_RESPONSE8BE) {
-      if (obj.headerCrc !== CRC.crc8(data.slice(0,6))) {
-        headerCrcPass = false;
-        logger.warn('BRIDGE: Bad header crc possible id = ' + obj.id);
+      // calc 1-byte checksum
+      chksum = data[0] ^ data[1];
+      for (let i = 2; i < self.constants.PROTOCOL_PRO4_HEADER_SIZE; i++) {
+        chksum ^= data[i];
       }
+      if (obj.crcType.crc8.headerCrc !== chksum) {
+        headerCrcPass = false;
+        logger.warn('BRIDGE: Bad header crc; possible id = ' + obj.crcType.crc8.id);
+      }   
     }
 
     // validate total CRC
     if (obj.sync == this.constants.SYNC_RESPONSE32BE) {
-      if (obj.headerCrc !== CRC.crc32(data.slice(0,end))) {
+      if (obj.crcType.crc32.headerCrc !== CRC.crc32(data.slice(headerLen,data.length-padding))) {
         totalCrcPass = false;
-        logger.warn('BRIDGE: Bad total crc possible id = ' + obj.id);
+        logger.warn('BRIDGE: Bad total crc; possible id = ' + obj.crcType.crc32.id);
       }
     }
     if (obj.sync == this.constants.SYNC_RESPONSE8BE) {
-      if (obj.headerCrc !== CRC.crc8(data.slice(0,end))) {
+      // calc 1-byte checksum
+      chksum = data[7] ^ data[8];
+      for (let i = 9; i < data.length-padding; i++) {
+        chksum ^= data[i];
+      }
+      if (obj.crcType.crc8.headerCrc !== chksum) {
         totalCrcPass = false;
-        logger.warn('BRIDGE: Bad total crc possible id = ' + obj.id);
+        logger.warn('BRIDGE: Bad total crc; possible id = ' + obj.crcType.crc8.id);
       }
     }
 
     if (headerCrcPass && totalCrcPass) {
+      // extract payload and send to parser
+      // add to retVal object property
+      let begin = 0;
+      if (obj.sync == self.constants.SYNC_RESPONSE32LE) {
+        obj.id = obj.crcType.crc32.id;
+        begin = data.length - padding - obj.crcType.crc32.payloadLength;
+      }
+      if (obj.sync == self.constants.SYNC_RESPONSE8LE) {
+        obj.id = obj.crcType.crc8.id;
+        begin = data.length - padding - obj.crcType.crc8.payloadLength;
+      }
+      let end = data.length - padding;
+      let payload = data.slice(begin, end);
+      // now parse payload based on device ID
+      // obj.type used by browser telemetry plugin
+      if (obj.id >= 11 && obj.id <= 17) {
+        obj.type = 'thruster';
+        obj.payload = self.ParserMotors.parse(payload);        
+      }
+      else if (obj.id >= 61 && obj.id <= 64) {
+        obj.type = 'lights';
+        obj.payload = self.ParserLights.parse(payload);        
+      }
+      else if ((obj.id >= 42 && obj.id <= 51)) {
+        obj.type = 'crumb';
+        obj.payload = self.ParserBam.parse(payload);        
+      }
+
       retVal = obj;
     }
     else {
       retVal = {};
     }
 
-    logger.debug('BRIDGE: Debug PRO4 response = ' + obj.toString('hex'));
     return retVal;
   }
 }

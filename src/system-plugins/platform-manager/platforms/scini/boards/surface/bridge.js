@@ -54,16 +54,18 @@ const mqtt          = require('mqtt');
 const EventEmitter  = require('events').EventEmitter;
 const logger        = require('AppFramework.js').logger;
 const pro4          = require('./pro4');
+const q             = require('queue');
 
 class Bridge extends EventEmitter
 {
-  constructor( mqttBrokerIp )
+  constructor( mqttBrokerIp, globalBus )
   {
     super();
 
     this.emitRawSerial = false;
     this.mqttConnected = false;
     this.client = {};
+    this.globalBus = globalBus;
     this.mqttUri = 'ws://' + mqttBrokerIp + ':3000';
     this.parser = new pro4.Pro4();
 
@@ -71,6 +73,9 @@ class Bridge extends EventEmitter
     this.targetHoldEnabled  = false;
     this.laserEnabled       = false;
 
+    // *********** SCINI job queues for surface-to-sub concurrency control ****
+    this.jobs = {};
+    this.results = {};
     // *********** SCINI specific platform hardware request state *************
     this.sensors = {
       time:             0,
@@ -109,19 +114,19 @@ class Bridge extends EventEmitter
       },
       pro4:             {
         pro4Sync:       pro4.constants.SYNC_REQUEST8LE,
-        pro4Addresses:  [31],       // XXX - set these correctly
-        flags:          0x80,
+        pro4Addresses:  [0x31],     // XXX - set these correctly
+        flags:          0x00,       // or 0x80  
         csrAddress:     0xf0,       // custom command address
         lenNoop:        6,          // no write, just read all values
         lenBam:         11,         // send write to control servos, GPIOs
         payloadHeader:  0x53434e49, // "SCNI" - beginning of request payloads
         payloadLenNoop: 2,          // no write, just read all values
-        payloadLenBam:  6,          // send write to control servos, GPIOs
+        payloadLenBam:  7,          // send write to control servos, GPIOs
         payloadCmdNoop: 0,          // no write, just read all values
-        payloadCmdBam:  0x10,       // send write to control servos, GPIOs
-        payloadServo1:  0x8000,     // 2 byte servo 1 angle
-        payloadServo2:  0x8000,     // 2 byte servo 2 angle
-        payloadGpio:    0           // 1 byte output bits
+        payloadCmdBam:  0x02,       // send write to control servos, GPIOs
+        payloadServo1:  0x0040,     // 2 byte servo 1 angle (little endian)
+        payloadServo2:  0x2233,     // 2 byte servo 2 angle (little endian)
+        payloadGpio:    0xa5        // 1 byte output bits
       }
     }
 
@@ -248,9 +253,9 @@ class Bridge extends EventEmitter
 
     // Add SCINI device control interval functions
     self.sensorInterval = setInterval( function() { return self.requestSensors(); },          self.sensors.updateInterval );
-    self.lightsInterval = setInterval( function() { return self.updateLights(); },       self.vehicleLights.updateInterval );
-    self.motorInterval = setInterval( function() { return self.updateMotors(); },     self.motorControl.updateInterval );
-    self.rotateMotorInterval = setInterval( function() { return self.rotateMotor(); },     self.motorControl.rotateInterval );
+    //self.lightsInterval = setInterval( function() { return self.updateLights(); },       self.vehicleLights.updateInterval );
+    //self.motorInterval = setInterval( function() { return self.updateMotors(); },     self.motorControl.updateInterval );
+    //self.rotateMotorInterval = setInterval( function() { return self.rotateMotor(); },     self.motorControl.rotateInterval );
     // XXX - grippers unused at the moment, left in case need to change
     // self.gripperInterval = setInterval( function() { return self.updateGrippers(); },     self.gripperControl.updateInterval );
 
@@ -278,7 +283,7 @@ class Bridge extends EventEmitter
       this.client.subscribe('sensors/+'); // receive all sensor telemetry
       this.client.subscribe('clump/+'); // receive all clump weight topics
       this.client.subscribe('vehicle/+'); // receive all vechicle topics
-      this.client.subscribe('fromScini/+'); // receive all messages from the ROV
+      this.client.subscribe('fromScini/#'); // receive all messages from the ROV
     });
 
     this.client.on('reconnect', () => {
@@ -293,8 +298,29 @@ class Bridge extends EventEmitter
 
     this.client.on('message', (topic, message) => {
       // message is a Buffer object, send to decoder
+      logger.debug('BRIDGE: Received MQTT on topic ' + topic);
+      logger.debug('BRIDGE: Raw MQTT message = ' + message.toString('hex'));  
       let parsedObj = this.parser.decode(message);
-      logger.debug('BRIDGE: Parsed message = ' + parsedObj.toString('hex'));
+      // send response data to telemetry plugin
+      // all that is required is to send a text string of "key:value" 
+      // to emitStatus(status)
+      if (parsedObj.hasOwnProperty('id') 
+          && parsedObj.hasOwnProperty('payload')
+          && parsedObj.hasOwnProperty('type')) {
+            let parentId = parsedObj.type + parsedObj.id.toString();
+            for (let prop in parsedObj.payload) {
+              // skip the uninteresting stuff
+              if (prop === 'scni' 
+                  || prop === 'len'
+                  || prop === 'deviceType'
+                  || prop === 'cmd') {
+                    continue;
+                }
+              let value = parsedObj.payload[prop];          
+              let telemetryId = parentId + '.' + prop;
+              this.emitStatus(telemetryId + ':' + value + ';');
+            }
+      }
     });
 
     this.client.on('error', (err) => {
@@ -306,6 +332,36 @@ class Bridge extends EventEmitter
       this.mqttConnected = false;
       logger.debug('BRIDGE: MQTT broker connection closed!');
     });
+
+    this.globalBus.on('plugin.mqttBroker.clientConnected', (clientId) => {
+      logger.debug('BRIDGE: Received MQTT clientConnected() from ' + clientId);
+      // create new message queue for each ROV MQTT gateway
+      if (clientId.match('elphel.*')) {
+        // concurrency = 1 (one message in flight at a time)
+        // max wait time for response = 15ms
+        // autostart = always running if jobs are in queue
+        // results = store 
+        this.results[clientId] = [];
+        this.jobs[clientId] = new q({ 
+                                      concurrency: 1, 
+                                      timeout: 15, 
+                                      autostart: true, 
+                                      results: this.results[clientId]
+                                    });
+        this.jobs[clientId].on('timeout', function (next, job) {
+          logger.debug('BRIDGE: job timed out:', job.toString().replace(/\n/g, ''));
+          next();
+        });
+      }
+    });
+    this.globalBus.on('plugin.mqttBroker.clientDisconnected', (clientId) => {
+      logger.debug('BRIDGE: Received MQTT clientDisconnected() from ' + clientId);
+      // stop and empty queue
+      if (clientId.match('elphel.*')) {
+        this.results[clientId] = [];
+        this.jobs[clientId].end();
+      }
+    });
   }
 
   close()
@@ -315,16 +371,24 @@ class Bridge extends EventEmitter
     logger.debug('Received bridge close().  Closing MQTT broker connection and removing status update intervals.');
 
     // Remove status interval functions
-    clearInterval( this.imuInterval );
-    clearInterval( this.depthInterval );
-    clearInterval( this.cbInterval );
-    clearInterval( this.lightsInterval );
-    //clearInterval( this.motorInterval );
+    clearInterval( self.sensorInterval );
+    clearInterval( self.lightsInterval );
+    clearInterval( self.motorInterval );
+    clearInterval( self.rotateInterval );
+    // clearInterval( self.gripperInterval);
     
-    this.client.end(false, () => {
-      logger.debug('MQTT this.client.end() returned.');
-      this.mqttConnected = false;
+    self.client.end(false, () => {
+      logger.debug('BRIDGE: MQTT this.client.end() returned.');
+      self.mqttConnected = false;
     });
+
+    // stop and empty job queues
+    logger.debug('BRIDGE: Empty and stop MQTT client job queues');
+    // stop and empty queue
+    if (clientId.match('elphel.*')) {
+      this.results[clientId] = [];
+      this.jobs[clientId].end();
+    }
   }
 
   write( command )
@@ -768,15 +832,24 @@ class Bridge extends EventEmitter
     this.emitStatus('cmd:' + command);
   }
 
-  sendToMqtt ( command )
+  addToQueue ( packetBuf )
   {
-    if( this.mqttConnected ) 
+    let self = this;
+    // keep it simple - add packet buf to each gateway queue
+    for ( let clientId in self.jobs ) {
+      self.jobs[clientId].push(function () { return self.sendToMqtt(clientId, packetBuf); });  
+    }
+  }
+
+  sendToMqtt ( clientId, packetBuf )
+  {
+    let self = this;
+    if( self.mqttConnected ) 
     {
-      
-      this.client.publish('toScini/elphel/request', command);
-      if( this.emitRawSerial ) 
+      self.client.publish('toScini/' + clientId, packetBuf);
+      if( self.emitRawSerial ) 
       {
-        this.emit('serial-sent', command );
+        self.emit('serial-sent', packetBuf );
       }
     } 
     else
@@ -812,7 +885,6 @@ class Bridge extends EventEmitter
     // hack for null status values being passed to handlers
     if (!txtStatus)
     {
-      logger.debug('BRIDGE: Null status value');
       txtStatus={};
     }
     this.emit('status', txtStatus);
@@ -1034,146 +1106,149 @@ class Bridge extends EventEmitter
     logger.debug('Received gripper command, not used.');
 
   }
-}
 
-// send crumb644 sensor request
-requestSensors()
-{
-  let self = this;
-  let type = 'NOOP';  // 'NOOP' (read all) or 'set' (servos, GPIOs)
-  
-  // shorter name for easier reading
-  let p = self.sensors.pro4;
+  // send crumb644 sensor request
+  requestSensors()
+  {
+    let self = this;
+    let type = 'BAM';  // 'NOOP' (read) or 'BAM' (read / write servos, GPIOs)
+    
+    // shorter name for easier reading
+    let p = self.sensors.pro4;
 
-  // Update time -- fix this to only set in request or response for all 
-  // intervals
-  self.sensors.time += self.sensors.timeDelta_ms;
-  
-  let payload = new Buffer.allocUnsafe(self.sensors.pro4.lenNoop);
-  payload.writeFloatBE(p.payloadHeader, 0);  // "SCNI"
-  payload.writeUInt8(p.payloadLenNoop, 4); // payload len
-  payload.writeUInt8(p.payloadCmdNoop, 5); // payload cmd
+    // Update time -- fix this to only set in request or response for all 
+    // intervals
+    self.sensors.time += self.sensors.timeDelta_ms;
+    
+    let payload = new Buffer.allocUnsafe(self.sensors.pro4.lenBam);
+    payload.writeUInt32BE(p.payloadHeader, 0);  // "SCNI"
+    payload.writeUInt8(p.payloadLenBam, 4);     // payload len
+    payload.writeUInt8(p.payloadCmdBam, 5);     // payload cmd
+    payload.writeUInt16BE(p.payloadServo1, 6);  // payload servo1
+    payload.writeUInt16BE(p.payloadServo2, 8);  // payload servo2
+    payload.writeUInt8(p.payloadGpio, 10);      // payload gpio
+   
+    // Generate new pro4 packet for each address and send to all light modules
+    for (let i = 0; i < p.pro4Addresses.length; i++) {
+      (function() {
+        let j = i;  // loop closure
+        // Packet len = Header + 1-byte CRC + payload + 1-byte CRC = 14
+        let packetBuf = self.parser.encode(p.pro4Sync, p.pro4Addresses[j], p.flags, p.csrAddress, p.lenBam, payload);
+        // self.sendToMqtt(packetBuf);
+        self.addToQueue(packetBuf);
+      })();
+    }
 
-  // Generate new pro4 packet for each address and send to all light modules
-  for (let i = 0; i < p.pro4Addresses.length; i++) {
-    (function() {
-      let j = i;  // loop closure
-      // Packet len = Header + 1-byte CRC + payload + 1-byte CRC = 14
-      let packetBuf = self.parser.encode(p.pro4Sync, p.pro4Addresses[j], p.flags, p.csrAddress, p.lenNoop, payload);
-      // maintain light state by updating at least once per second
-      self.sendToMqtt(packetBuf);
-    })();
+    logger.debug('Sent Crumb644 ' + type + ' request');
   }
 
-  logger.debug('Sent Crumb644 ' + type + ' request');
-}
+  // Updates power supply values, IMU, depth sensors, etc. after request
+  updateSensors()
+  {
+  // Update time
+  this.sensors.time += this.sensors.timeDelta_ms;
 
-// Updates power supply values, IMU, depth sensors, etc. after request
-updateSensors()
-{
-// Update time
-this.sensors.time += this.sensors.timeDelta_ms;
+      // Generate pitch -90:90 degrees
+      this.sensors.imu.pitch = 90 * Math.sin( this.sensors.time * ( Math.PI / 10000 ) );
+      
+      // Generate roll -90:90 degrees
+      this.sensors.imu.roll = 90 * Math.sin( this.sensors.time * ( Math.PI / 30000 ) );
+      
+      // Generate yaw between -120:120 degrees
+      let baseYaw = 120 * Math.sin( this.sensors.time * ( Math.PI / 10000 ) );
 
-    // Generate pitch -90:90 degrees
-    this.sensors.imu.pitch = 90 * Math.sin( this.sensors.time * ( Math.PI / 10000 ) );
-    
-    // Generate roll -90:90 degrees
-    this.sensors.imu.roll = 90 * Math.sin( this.sensors.time * ( Math.PI / 30000 ) );
-    
-    // Generate yaw between -120:120 degrees
-    let baseYaw = 120 * Math.sin( this.sensors.time * ( Math.PI / 10000 ) );
-
-    // Handle mode switches (gyro mode is -180:180, mag mode is 0:360)
-    if( this.sensors.imu.mode === 0 )
-    {
-      this.sensors.imu.yaw = baseYaw;
-    }
-    else if( this.sensors.imu.mode === 1 )
-    {
-      this.sensors.imu.yaw = normalizeAngle360( baseYaw );
-    }
-
-    // Create result string
-    let result = "";
-    result += 'imu_p:' + this.encode( this.sensors.imu.pitch - this.sensors.imu.pitchOffset ) + ';';
-    result += 'imu_r:' + this.encode( this.sensors.imu.roll - this.sensors.imu.rollOffset )+ ';';
-
-    // Handle imu mode for yaw/heading
-    if( this.sensors.imu.mode === 0 )
-    {
-      // GYRO mode
-      result += 'imu_y:' + this.encode( normalizeAngle180( this.sensors.imu.yaw - this.sensors.imu.yawOffset ) ) + ';';
-    }
-    else if( this.sensors.imu.mode === 1 )
-    {
-      // MAG mode
-      result += 'imu_y:' + this.encode( this.sensors.imu.yaw ) + ';';
-    }
-
-    // DEPTH
-    // Generate depth from -10:10 meters
-    this.sensors.depth.depth = 10 * Math.sin( this.sensors.time * ( Math.PI / 20000 ) );
-
-    // Generate temperature from 15:25 degrees
-    this.sensors.depth.temp = 20 + ( 5 * Math.sin( this.sensors.time * ( Math.PI / 40000 ) ) );
-
-    // Generate pressure from 50:70 kPa
-    this.sensors.depth.pressure = 60 + ( 10 * Math.sin( this.sensors.time * ( Math.PI / 40000 ) ) );
-
-    // Create result string (Note: we don't bother to take into account water type or offsets w.r.t. temperature or pressure )
-
-    result = "";
-    result += 'depth_d:' + this.encode( this.sensors.depth.depth - this.sensors.depth.depthOffset ) + ';';
-    result += 'depth_t:' + this.encode( this.sensors.depth.temp ) + ';';
-    result += 'depth_p:' + this.encode( this.sensors.depth.pressure ) + ';';
-
-    // Power Supplies
-    // Generate a current baseline from 1:2 amps
-    let currentBase = ( ( Math.random() * 1 ) + 1 );
-
-    // Generate currents for each battery tube from the base current, deviation of +/- 0.2A
-    this.sensors.ps.bt1i = currentBase + ( ( Math.random() * 0.4 ) - 0.2 );
-    this.sensors.ps.bt2i = currentBase + ( ( Math.random() * 0.4 ) - 0.2 );
-
-    // Get total current by adding the two tube currents
-    this.sensors.ps.iout = this.sensors.ps.bt1i + this.sensors.ps.bt2i;
-
-    // Generate board voltage (ramps up and down between 5V and 12V)
-    if( this.sensors.ps.brdvRampUp )
-    {
-      this.sensors.ps.brdv += 0.5;
-      if( this.sensors.ps.brdv >= 12 )
+      // Handle mode switches (gyro mode is -180:180, mag mode is 0:360)
+      if( this.sensors.imu.mode === 0 )
       {
-        this.sensors.ps.brdvRampUp = false;
+        this.sensors.imu.yaw = baseYaw;
       }
-    }
-    else
-    {
-      this.sensors.ps.brdv -= 0.5;
-      if( this.sensors.ps.brdv <= 5 )
+      else if( this.sensors.imu.mode === 1 )
       {
-        this.sensors.ps.brdvRampUp = true;
+        this.sensors.imu.yaw = normalizeAngle360( baseYaw );
       }
-    }
 
-    this.sensors.ps.vout = this.sensors.ps.brdv;
+      // Create result string
+      let result = "";
+      result += 'imu_p:' + this.encode( this.sensors.imu.pitch - this.sensors.imu.pitchOffset ) + ';';
+      result += 'imu_r:' + this.encode( this.sensors.imu.roll - this.sensors.imu.rollOffset )+ ';';
 
-    //Generate internal pressure values
-    this.sensors.ps.baro_p = 30000000;
-    let num = Math.floor(Math.random()*1000000) + 1; // this will get a number between 1 and 99;
-    num *= Math.floor(Math.random()*2) == 1 ? 1 : -1; // this will add minus sign in 50% of cases
-    this.sensors.ps.baro_p += num;
+      // Handle imu mode for yaw/heading
+      if( this.sensors.imu.mode === 0 )
+      {
+        // GYRO mode
+        result += 'imu_y:' + this.encode( normalizeAngle180( this.sensors.imu.yaw - this.sensors.imu.yawOffset ) ) + ';';
+      }
+      else if( this.sensors.imu.mode === 1 )
+      {
+        // MAG mode
+        result += 'imu_y:' + this.encode( this.sensors.imu.yaw ) + ';';
+      }
 
-    // Create result string
-    result = "";
-    result += 'BT2I:' + this.sensors.ps.bt2i + ';';
-    result += 'BT1I:' + this.sensors.ps.bt1i + ';';
-    result += 'BRDV:' + this.sensors.ps.brdv + ';';
-    result += 'vout:' + this.sensors.ps.vout + ';';
-    result += 'iout:' + this.sensors.ps.iout + ';';
-    result += 'time:' + this.sensors.ps.time + ';';
-    result += 'baro_p:' + this.sensors.ps.baro_p + ';';
-    result += 'baro_t:' + this.sensors.ps.baro_t + ';';
+      // DEPTH
+      // Generate depth from -10:10 meters
+      this.sensors.depth.depth = 10 * Math.sin( this.sensors.time * ( Math.PI / 20000 ) );
+
+      // Generate temperature from 15:25 degrees
+      this.sensors.depth.temp = 20 + ( 5 * Math.sin( this.sensors.time * ( Math.PI / 40000 ) ) );
+
+      // Generate pressure from 50:70 kPa
+      this.sensors.depth.pressure = 60 + ( 10 * Math.sin( this.sensors.time * ( Math.PI / 40000 ) ) );
+
+      // Create result string (Note: we don't bother to take into account water type or offsets w.r.t. temperature or pressure )
+
+      result = "";
+      result += 'depth_d:' + this.encode( this.sensors.depth.depth - this.sensors.depth.depthOffset ) + ';';
+      result += 'depth_t:' + this.encode( this.sensors.depth.temp ) + ';';
+      result += 'depth_p:' + this.encode( this.sensors.depth.pressure ) + ';';
+
+      // Power Supplies
+      // Generate a current baseline from 1:2 amps
+      let currentBase = ( ( Math.random() * 1 ) + 1 );
+
+      // Generate currents for each battery tube from the base current, deviation of +/- 0.2A
+      this.sensors.ps.bt1i = currentBase + ( ( Math.random() * 0.4 ) - 0.2 );
+      this.sensors.ps.bt2i = currentBase + ( ( Math.random() * 0.4 ) - 0.2 );
+
+      // Get total current by adding the two tube currents
+      this.sensors.ps.iout = this.sensors.ps.bt1i + this.sensors.ps.bt2i;
+
+      // Generate board voltage (ramps up and down between 5V and 12V)
+      if( this.sensors.ps.brdvRampUp )
+      {
+        this.sensors.ps.brdv += 0.5;
+        if( this.sensors.ps.brdv >= 12 )
+        {
+          this.sensors.ps.brdvRampUp = false;
+        }
+      }
+      else
+      {
+        this.sensors.ps.brdv -= 0.5;
+        if( this.sensors.ps.brdv <= 5 )
+        {
+          this.sensors.ps.brdvRampUp = true;
+        }
+      }
+
+      this.sensors.ps.vout = this.sensors.ps.brdv;
+
+      //Generate internal pressure values
+      this.sensors.ps.baro_p = 30000000;
+      let num = Math.floor(Math.random()*1000000) + 1; // this will get a number between 1 and 99;
+      num *= Math.floor(Math.random()*2) == 1 ? 1 : -1; // this will add minus sign in 50% of cases
+      this.sensors.ps.baro_p += num;
+
+      // Create result string
+      result = "";
+      result += 'BT2I:' + this.sensors.ps.bt2i + ';';
+      result += 'BT1I:' + this.sensors.ps.bt1i + ';';
+      result += 'BRDV:' + this.sensors.ps.brdv + ';';
+      result += 'vout:' + this.sensors.ps.vout + ';';
+      result += 'iout:' + this.sensors.ps.iout + ';';
+      result += 'time:' + this.sensors.ps.time + ';';
+      result += 'baro_p:' + this.sensors.ps.baro_p + ';';
+      result += 'baro_t:' + this.sensors.ps.baro_t + ';';
+  }
 }
 
 module.exports = Bridge;
