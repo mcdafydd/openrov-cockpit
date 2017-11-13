@@ -45,7 +45,7 @@ class Notifications {
                         multi: true
                     })
                     .then(function(numRemoved) {
-                        trace(`Cleared ${numRemoved} notifications`);
+                        logger.debug(`Cleared ${numRemoved} notifications`);
                         self.announceNotices();
                     })
             })
