@@ -117,6 +117,16 @@
                               }
                             } 
                           },
+          "RIGHT_STICK_X": { type: "axis",
+                            action: 'rovPilot.moveYaw',
+                            options: {
+                              inverted: false,
+                              exponentialSticks: {
+                                enabled: false,
+                                rate: 1.0
+                              }
+                            } 
+                          },
           "RIGHT_STICK_Y": { type: "axis",
                           action: 'sciniPilot.movePitch',
                           options: {

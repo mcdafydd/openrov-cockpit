@@ -253,11 +253,11 @@ class Bridge extends EventEmitter
 
     // Add SCINI device control interval functions
     self.sensorInterval = setInterval( function() { return self.requestSensors(); },          self.sensors.updateInterval );
-    //self.lightsInterval = setInterval( function() { return self.updateLights(); },       self.vehicleLights.updateInterval );
-    //self.motorInterval = setInterval( function() { return self.updateMotors(); },     self.motorControl.updateInterval );
-    //self.rotateMotorInterval = setInterval( function() { return self.rotateMotor(); },     self.motorControl.rotateInterval );
+    self.lightsInterval = setInterval( function() { return self.updateLights(); },       self.vehicleLights.updateInterval );
+    self.motorInterval = setInterval( function() { return self.updateMotors(); },     self.motorControl.updateInterval );
+    self.rotateMotorInterval = setInterval( function() { return self.rotateMotor(); },     self.motorControl.rotateInterval );
     // XXX - grippers unused at the moment, left in case need to change
-    // self.gripperInterval = setInterval( function() { return self.updateGrippers(); },     self.gripperControl.updateInterval );
+    //   self.gripperInterval = setInterval( function() { return self.updateGrippers(); },     self.gripperControl.updateInterval );
 
 
     // Connect to MQTT broker and setup all event handlers
@@ -360,6 +360,15 @@ class Bridge extends EventEmitter
       if (clientId.match('elphel.*')) {
         this.results[clientId] = [];
         this.jobs[clientId].end();
+      }
+    });
+    this.globalBus.on('plugin.mqttBroker.publishedByClientId', (clientId) => {
+      logger.debug('BRIDGE: MQTT message published by client ' + clientId);
+      // remove current message from queue to continue servicing
+      if (typeof(clientId) != 'undefined') {
+        if (clientId.match('elphel.*')) {
+          this.jobs[clientId].pop();
+        }
       }
     });
   }
@@ -872,7 +881,7 @@ class Bridge extends EventEmitter
       }
       else
       {
-        logger.warn( "NAN RESULT: " + parts[ 1 ] );
+        logger.debug( "NAN RESULT: " + parts[ 1 ] );
       }
     }
 
@@ -970,7 +979,8 @@ class Bridge extends EventEmitter
         // Packet len = Header + 4-byte CRC + payload + 4-byte CRC = 27
         let packetBuf = self.parser.encode(p.pro4Sync, p.pro4Addresses[j], p.flags, p.csrAddress, p.len, payload);
         // maintain light state by updating at least once per second
-        self.sendToMqtt(packetBuf);
+        // self.sendToMqtt(packetBuf);
+        self.addToQueue(packetBuf);
       })();
     }
 
@@ -1013,7 +1023,8 @@ class Bridge extends EventEmitter
       // first address in array is a multicast group
       packetBuf = self.parser.encode(p.pro4Sync, p.pro4Addresses[0], p.flags, p.csrAddress, p.len, payload);
       // maintain state by updating at least once per second
-      self.sendToMqtt(packetBuf);
+      // self.sendToMqtt(packetBuf);
+      self.addToQueue(packetBuf);
     }
     else {
       // first address in array is not multicast
@@ -1024,7 +1035,8 @@ class Bridge extends EventEmitter
           // Packet len = Header + 4-byte CRC + payload + 4-byte CRC = 27
           packetBuf = self.parser.encode(p.pro4Sync, m[j].nodeId, p.flags, p.csrAddress, p.len, payload);
           // maintain light state by updating at least once per second
-          self.sendToMqtt(packetBuf);
+          // self.sendToMqtt(packetBuf);
+          self.addToQueue(packetBuf);
         })();
       }
     }
@@ -1081,7 +1093,8 @@ class Bridge extends EventEmitter
       // first address in array is a multicast group
       packetBuf = self.parser.encode(p.pro4Sync, p.pro4Addresses[0], p.flags, p.csrAddress, p.len, payload);
       // maintain state by updating at least once per second
-      self.sendToMqtt(packetBuf);
+      // self.sendToMqtt(packetBuf);
+      self.addToQueue(packetBuf);
     }
     else {
       // first address in array is not multicast
@@ -1092,7 +1105,8 @@ class Bridge extends EventEmitter
           // Packet len = Header + 4-byte CRC + payload + 4-byte CRC = 27
           packetBuf = self.parser.encode(p.pro4Sync, m[j].nodeId, p.flags, p.csrAddress, p.len, payload);
           // maintain light state by updating at least once per second
-          self.sendToMqtt(packetBuf);
+          // self.sendToMqtt(packetBuf);
+          self.addToQueue(packetBuf);
         })();
       }
     }
