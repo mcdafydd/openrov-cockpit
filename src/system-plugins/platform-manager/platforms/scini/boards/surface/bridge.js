@@ -733,10 +733,9 @@ class Bridge extends EventEmitter
         // Update state object to be sent on next packet interval
 
         let thrust = parameters[0]; // must be converted to 32-bit IEEE 754 float in payload
-        let scaleFactor = 0.083;  // openrov caps throttle values at 12
 
-        // Scale and limit thrust between -0.65 and 0.65 (maximums are -1, 1)      
-        thrust *= scaleFactor;  
+        // Scale and limit thrust between -0.65 and 0.65 (maximums are -1, 1)  // OpenROV sends values 0-100 based on system power level    
+        thrust *= 0.01;  
         thrust = Math.max(thrust,-0.65);
         thrust = Math.min(thrust, 0.65);
 
@@ -758,10 +757,10 @@ class Bridge extends EventEmitter
       case 'yaw':
       {
         let yaw = parameters[0]; // must be converted to 32-bit IEEE 754 float in payload
-        let scaleFactor = 0.083;  // openrov caps throttle values at 12
 
-        // Scale and limit thrust between -0.65 and 0.65 (maximums are -1, 1)      
-        yaw *= scaleFactor;  
+        // Scale and limit thrust between -0.65 and 0.65 (maximums are -1, 1)  
+        // OpenROV sends values 0-100 based on system power level
+        yaw *= 0.01;  
         yaw = Math.max(yaw,-0.65);
         yaw = Math.min(yaw, 0.65);
 
@@ -782,10 +781,9 @@ class Bridge extends EventEmitter
       case 'lift':
       {
         let lift = parameters[0]; // must be converted to 32-bit IEEE 754 float in payload
-        let scaleFactor = 0.083;  // openrov caps throttle values at 12
 
-        // Scale and limit thrust between -0.65 and 0.65 (maximums are -1, 1)      
-        lift *= scaleFactor;  
+        // Scale and limit thrust between -0.65 and 0.65 (maximums are -1, 1)  // OpenROV sends values 0-100 based on system power level    
+        lift *= 0.01;  
         lift = Math.max(lift,-0.65);
         lift = Math.min(lift, 0.65);
 
@@ -812,10 +810,9 @@ class Bridge extends EventEmitter
       case 'pitch':
       {
         let pitch = parameters[0]; // must be converted to 32-bit IEEE 754 float in payload
-        let scaleFactor = 0.083;  // openrov caps throttle values at 12
 
-        // Scale and limit thrust between -0.65 and 0.65 (maximums are -1, 1)      
-        pitch *= scaleFactor;  
+        // Scale and limit thrust between -0.65 and 0.65 (maximums are -1, 1)  // OpenROV sends values 0-100 based on system power level    
+        pitch *= 0.01;  
         pitch = Math.max(pitch,-0.65);
         pitch = Math.min(pitch, 0.65);
 
@@ -837,10 +834,9 @@ class Bridge extends EventEmitter
       { 
 
         let strafe = parameters[0]; // must be converted to 32-bit IEEE 754 float in payload
-        let scaleFactor = 0.083;  // openrov caps throttle values at 12
 
-        // Scale and limit thrust between -0.65 and 0.65 (maximums are -1, 1)      
-        strafe *= scaleFactor;  
+        // Scale and limit thrust between -0.65 and 0.65 (maximums are -1, 1)  // OpenROV sends values 0-100 based on system power level    
+        strafe *= 0.01;  
         strafe = Math.max(strafe,-0.65);
         strafe = Math.min(strafe, 0.65);
 

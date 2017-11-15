@@ -96,12 +96,12 @@ thrusters5x1.prototype.getSettingSchema = function getSettingSchema() {
               'default': false
             },
             'forward-modifier': {
-              'description' : 'Used to adjust the power sent to the motor so that thrusters provide equal thrust',
+              'description' : 'Used to adjust the power sent to the motor so that thrusters provide equal thrust (not implemented)',
               'type': 'number',
               'default': 1
             },
             'reverse-modifier': {
-              'description' : 'Used to adjust the power sent to the motor so that thrusters provide equal thrust',              
+              'description' : 'Used to adjust the power sent to the motor so that thrusters provide equal thrust (not implemented)',              
               'type': 'number',
               'default': 2
             }
@@ -117,12 +117,12 @@ thrusters5x1.prototype.getSettingSchema = function getSettingSchema() {
               'default': false
             },
             'forward-modifier': {
-              'description' : 'Used to adjust the power sent to the motor so that thrusters provide equal thrust',              
+              'description' : 'Used to adjust the power sent to the motor so that thrusters provide equal thrust (not implemented)',              
               'type': 'number',
               'default': 1
             },
             'reverse-modifier': {
-              'description' : 'Used to adjust the power sent to the motor so that thrusters provide equal thrust',              
+              'description' : 'Used to adjust the power sent to the motor so that thrusters provide equal thrust (not implemented)',              
               'type': 'number',
               'default': 2
             }
@@ -138,12 +138,12 @@ thrusters5x1.prototype.getSettingSchema = function getSettingSchema() {
               'default': false
             },
             'forward-modifier': {
-              'description' : 'Used to adjust the power sent to the motor so that thrusters provide equal thrust',              
+              'description' : 'Used to adjust the power sent to the motor so that thrusters provide equal thrust (not implemented)',              
               'type': 'number',
               'default': 1
             },
             'reverse-modifier': {
-              'description' : 'Used to adjust the power sent to the motor so that thrusters provide equal thrust',              
+              'description' : 'Used to adjust the power sent to the motor so that thrusters provide equal thrust (not implemented)',              
               'type': 'number',
               'default': 2
             }
@@ -159,12 +159,12 @@ thrusters5x1.prototype.getSettingSchema = function getSettingSchema() {
               'default': false
             },
             'forward-modifier': {
-              'description' : 'Used to adjust the power sent to the motor so that thrusters provide equal thrust',              
+              'description' : 'Used to adjust the power sent to the motor so that thrusters provide equal thrust (not implemented)',              
               'type': 'number',
               'default': 1
             },
             'reverse-modifier': {
-              'description' : 'Used to adjust the power sent to the motor so that thrusters provide equal thrust',              
+              'description' : 'Used to adjust the power sent to the motor so that thrusters provide equal thrust (not implemented)',              
               'type': 'number',
               'default': 2
             }
@@ -180,12 +180,12 @@ thrusters5x1.prototype.getSettingSchema = function getSettingSchema() {
               'default': false
             },
             'forward-modifier': {
-              'description' : 'Used to adjust the power sent to the motor so that thrusters provide equal thrust',              
+              'description' : 'Used to adjust the power sent to the motor so that thrusters provide equal thrust (not implemented)',              
               'type': 'number',
               'default': 1
             },
             'reverse-modifier': {
-              'description' : 'Used to adjust the power sent to the motor so that thrusters provide equal thrust',              
+              'description' : 'Used to adjust the power sent to the motor so that thrusters provide equal thrust (not implemented)',              
               'type': 'number',
               'default': 2
             }
