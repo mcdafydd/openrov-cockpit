@@ -33,21 +33,13 @@
 
 /*
 
-Example OpenROV strings to convert to PRO4
+Example OpenROV strings to convert to PRO4 not yet integrated
 
 START  camServ_inv(0);
 START  camServ_spd(45000);
 START  depth_water(0);
 START  imu_level(0,0);
-START  lift(0);
-START  mtrmod1(100,100,-100);
-START  mtrmod2(200,200,-200);
-START  pitch(0);
-START  roll(0);
-START  strafe(0);
-START  throttle(0);
 START  wake();
-START  yaw(0);
 
 */
 const mqtt          = require('mqtt');
@@ -198,35 +190,35 @@ class Bridge extends EventEmitter
       responderIdx:     0,      // motor array index that will respond to requests
       motors:           [
         {
-          name:         "stern thruster",
+          name:         "thruster",
           nodeId:       31,     // PRO4 packet ID
           motorId:      0,      // device protocol ID, position in PRO4 payload
           value:        0,      // thrust value (-1 to +1)
           reverse:      false   // boolean
         },
         {
-          name:         "aft side",
+          name:         "aft starboard",
           nodeId:       32,     // PRO4 packet IDar
           motorId:      1,      // device protocol ID, position in PRO4 payload
           value:        0,      // thrust value (-1 to +1)
           reverse:      false   // boolean
         },
         {
-          name:         "aft bottom",
+          name:         "aft vertical",
           nodeId:       33,     // PRO4 packet ID
           motorId:      2,      // device protocol ID, position in PRO4 payload
           value:        0,      // thrust value (-1 to +1)
           reverse:      false   // boolean
         },
         {
-          name:         "fore side",
+          name:         "starboard",
           nodeId:       34,     // PRO4 packet ID
           motorId:      3,      // device protocol ID, position in PRO4 payload
           value:        0,      // thrust value (-1 to +1)
           reverse:      false   // boolean
         },
         {
-          name:         "fore bottom",
+          name:         "vertical",
           nodeId:       35,     // PRO4 packet ID
           motorId:      4,      // device protocol ID, position in PRO4 payload
           value:        0,      // thrust value (-1 to +1)
@@ -667,6 +659,47 @@ class Bridge extends EventEmitter
       case 'gripper_stationary': 
       {
         this.emitStatus('gripper_stationary:' + parameters[0]);
+        break;
+      }
+
+      // forward thrust modifier - used for reverse flag detection
+      // modifiers not implemented right now
+      case 'mtrmod1':
+      {
+        // Order of parameter values:
+        // thruster, vertical, starboard, aftvertical, aftstarboard
+        // Ack command (ex: mtrmod1(100,100,-100,100,-100));
+        if (parameters[0] < 0)
+          this.motorControl.motors[0].reverse = true;
+        else
+          this.motorControl.motors[0].reverse = false;
+        if (parameters[1] < 0)
+          this.motorControl.motors[4].reverse = true;
+        else
+          this.motorControl.motors[4].reverse = false;
+        if (parameters[2] < 0)
+          this.motorControl.motors[3].reverse = true;
+        else
+          this.motorControl.motors[3].reverse = false;
+        if (parameters[3] < 0)
+          this.motorControl.motors[2].reverse = true;
+        else
+          this.motorControl.motors[2].reverse = false;
+        if (parameters[4] < 0)
+          this.motorControl.motors[1].reverse = true;
+        else
+          this.motorControl.motors[1].reverse = false;
+        
+        this.emitStatus('mtrmod1:' + parameters[0] );
+        break;
+      }
+
+      // reverse thrust modifier
+      // modifiers not implemented right now
+      case 'mtrmod2':
+      {
+        // Ack command (ex: mtrmod2(200,200,-200,200,-200));
+        this.emitStatus('mtrmod2:' + parameters[0] );
         break;
       }
 

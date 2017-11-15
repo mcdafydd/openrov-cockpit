@@ -1,7 +1,7 @@
 <link rel="import" href="../polymer/polymer.html">
 <link rel="import" href="../paper-slider/paper-slider.html">
 <link rel="import" href="../orov-behaviors/orov-behavior.html">
-<dom-module name="orov-thrusters2x1-motortest">
+<dom-module name="orov-thrusters5x1-motortest">
 <style>
    paper-slider {
       width: 80%;
@@ -33,22 +33,24 @@
 <script>
 (function() {
   Polymer({
-    is:'orov-thrusters2x1-motortest',
+    is:'orov-thrusters5x1-motortest',
     properties: {
       motors: {type: Array, value: function(){return[
-        {name:'port', percent: 0, reversed: false},
+        {name:'thruster', percent: 0, reversed: false},
         {name:'vertical', percent: 0, reversed: false},
-        {name:'starboard', percent: 0, reversed: false}
+        {name:'starboard', percent: 0, reversed: false},
+        {name:'aftvertical', percent: 0, reversed: false},
+        {name:'aftstarboard', percent: 0, reversed: false},
       ]}}
     },   
     behaviors: [namespace('behaviors').oROVStandard],
     registerEmitterHandlers: function(emitter){
       var self = this;
-      emitter.on('settings-change.thrusters2x1',function(settings){
+      emitter.on('settings-change.thrusters5x1',function(settings){
         self.motors.forEach(function(motor){
           var index = self.motors.indexOf(motor);
-          self.set('motors.'+index+'.reversed',settings.thrusters2x1[motor.name].reversed);
-      //  motor.reversed = settings.thrusters2x1[motor.name].reversed;
+          self.set('motors.'+index+'.reversed',settings.thrusters5x1[motor.name].reversed);
+      //  motor.reversed = settings.thrusters5x1[motor.name].reversed;
 
         })
       //  self.notifyPath('motors',self.motors);
@@ -64,7 +66,7 @@
                   starboard: this.motors[2].percent
                 }
       if (this.eventEmitter !== undefined){
-        this.eventEmitter.emit('plugin.thrusters2x1.motorTest',motor_state);
+        this.eventEmitter.emit('plugin.thrusters5x1.motorTest',motor_state);
       }
       this.fire('motor-state-change',motor_state);
     },

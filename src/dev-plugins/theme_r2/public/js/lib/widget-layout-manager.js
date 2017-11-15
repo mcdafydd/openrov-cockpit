@@ -42,9 +42,9 @@ $(document).ready(function () {
         '_linkhref': 'telemetry/orov-telemetry-monitor.html'
       },
       {
-        'tag': 'orov-thrusters2x1-motortest',
+        'tag': 'orov-thrusters5x1-motortest',
         'settings': {},
-        '_linkhref': 'thrusters2x1/orov-thrusters2x1-motortest.html'
+        '_linkhref': 'thrusters5x1/orov-thrusters5x1-motortest.html'
       }
     ],
     'system-panel': [
