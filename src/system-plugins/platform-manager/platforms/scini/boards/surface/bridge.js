@@ -194,35 +194,45 @@ class Bridge extends EventEmitter
           nodeId:       31,     // PRO4 packet ID
           motorId:      0,      // device protocol ID, position in PRO4 payload
           value:        0,      // thrust value (-1 to +1)
-          reverse:      false   // boolean
+          reverse:      false,  // boolean
+          fwdMod:       1.0,    // final forward thrust modifier
+          revMod:       1.0     // final reverse thrust modifier
         },
         {
           name:         "aft starboard",
           nodeId:       32,     // PRO4 packet IDar
           motorId:      1,      // device protocol ID, position in PRO4 payload
           value:        0,      // thrust value (-1 to +1)
-          reverse:      false   // boolean
+          reverse:      false,  // boolean
+          fwdMod:       1.0,    // final forward thrust modifier
+          revMod:       1.0     // final reverse thrust modifier          
         },
         {
           name:         "aft vertical",
           nodeId:       33,     // PRO4 packet ID
           motorId:      2,      // device protocol ID, position in PRO4 payload
           value:        0,      // thrust value (-1 to +1)
-          reverse:      false   // boolean
+          reverse:      false,  // boolean
+          fwdMod:       1.0,    // final forward thrust modifier
+          revMod:       1.0     // final reverse thrust modifier
         },
         {
           name:         "starboard",
           nodeId:       34,     // PRO4 packet ID
           motorId:      3,      // device protocol ID, position in PRO4 payload
           value:        0,      // thrust value (-1 to +1)
-          reverse:      false   // boolean
+          reverse:      false,  // boolean
+          fwdMod:       1.0,    // final forward thrust modifier
+          revMod:       1.0     // final reverse thrust modifier
         },
         {
           name:         "vertical",
           nodeId:       35,     // PRO4 packet ID
           motorId:      4,      // device protocol ID, position in PRO4 payload
           value:        0,      // thrust value (-1 to +1)
-          reverse:      false   // boolean
+          reverse:      false,  // boolean
+          fwdMod:       1.0,    // final forward thrust modifier
+          revMod:       1.0     // final reverse thrust modifier
         }
       ],
       pro4:             {
@@ -349,17 +359,19 @@ class Bridge extends EventEmitter
     this.globalBus.on('plugin.mqttBroker.clientDisconnected', (clientId) => {
       logger.debug('BRIDGE: Received MQTT clientDisconnected() from ' + clientId);
       // stop and empty queue
-      if (clientId.match('elphel.*')) {
-        this.results[clientId] = [];
-        this.jobs[clientId].end();
-      }
-    });
-    this.globalBus.on('plugin.mqttBroker.publishedByClientId', (clientId) => {
-      logger.debug('BRIDGE: MQTT message published by client ' + clientId);
-      // remove current message from queue to continue servicing
       if (typeof(clientId) != 'undefined') {
         if (clientId.match('elphel.*')) {
-          this.jobs[clientId].pop();
+          this.results[clientId] = [];
+          this.jobs[clientId].end();
+        }
+      }
+    });
+    this.globalBus.on('plugin.mqttBroker.publishedByClientId', (client) => {
+      logger.debug('BRIDGE: MQTT message published by client ' + client);
+      // remove current message from queue to continue servicing
+      if (typeof(client) != 'undefined') {
+        if (client.id.match('elphel.*')) {
+          this.jobs[client.id].pop();
         }
       }
     });
@@ -734,11 +746,16 @@ class Bridge extends EventEmitter
 
         let thrust = parameters[0]; // must be converted to 32-bit IEEE 754 float in payload
 
-        // Scale and limit thrust between -0.65 and 0.65 (maximums are -1, 1)  // OpenROV sends values 0-100 based on system power level    
-        thrust *= 0.01;  
-        // the following lines may be used to create a hard thruster limit
-        //thrust = Math.max(thrust,-0.65);
-        //thrust = Math.min(thrust, 0.65);
+        // OpenROV sends values 0-100 based on system power level    
+        thrust *= 0.01;
+        if (thrust > 0) {
+          thrust *= self.motorControl.motors[0].fwdMod;
+        }
+        if (thrust < 0) {
+          thrust *= self.motorControl.motors[0].revMod;
+        }
+        thrust = Math.max(thrust,-1.0);
+        thrust = Math.min(thrust, 1.0);
 
         // Update state variable(s)
         if (self.motorControl.motors[0].reverse == true) {
@@ -758,12 +775,17 @@ class Bridge extends EventEmitter
       case 'yaw':
       {
         let yaw = parameters[0]; // must be converted to 32-bit IEEE 754 float in payload
-
-        // Scale and limit thrust between -0.65 and 0.65 (maximums are -1, 1)  
+ 
         // OpenROV sends values 0-100 based on system power level
-        yaw *= 0.01;  
-        //yaw = Math.max(yaw,-0.65);
-        //yaw = Math.min(yaw, 0.65);
+        yaw *= 0.01;
+        if (yaw > 0) {
+          yaw *= self.motorControl.motors[1].fwdMod;
+        }
+        if (yaw < 0) {
+          yaw *= self.motorControl.motors[1].revMod;
+        }
+        yaw = Math.max(yaw,-1.0);
+        yaw = Math.min(yaw, 1.0);
 
         // Update state variable(s)
         if (self.motorControl.motors[1].reverse == true) {
@@ -783,10 +805,10 @@ class Bridge extends EventEmitter
       {
         let lift = parameters[0]; // must be converted to 32-bit IEEE 754 float in payload
 
-        // Scale and limit thrust between -0.65 and 0.65 (maximums are -1, 1)  // OpenROV sends values 0-100 based on system power level    
-        lift *= 0.01;  
-        //lift = Math.max(lift,-0.65);
-        //lift = Math.min(lift, 0.65);
+        // OpenROV sends values 0-100 based on system power level    
+        lift *= 0.01;
+        lift = Math.max(lift,-1.0);
+        lift = Math.min(lift, 1.0);
 
         // Update state variable(s)
         if (self.motorControl.motors[2].reverse == true) {
@@ -812,10 +834,16 @@ class Bridge extends EventEmitter
       {
         let pitch = parameters[0]; // must be converted to 32-bit IEEE 754 float in payload
 
-        // Scale and limit thrust between -0.65 and 0.65 (maximums are -1, 1)  // OpenROV sends values 0-100 based on system power level    
-        pitch *= 0.01;  
-        //pitch = Math.max(pitch,-0.65);
-        //pitch = Math.min(pitch, 0.65);
+        // OpenROV sends values 0-100 based on system power level    
+        pitch *= 0.01;
+        if (pitch > 0) {
+          pitch *= self.motorControl.motors[4].fwdMod;
+        }
+        if (pitch < 0) {
+          pitch *= self.motorControl.motors[4].revMod;
+        }
+        pitch = Math.max(pitch,-1.0);
+        pitch = Math.min(pitch, 1.0);
 
         // Update state variable(s)
         if (self.motorControl.motors[4].reverse == true) {
@@ -836,10 +864,10 @@ class Bridge extends EventEmitter
 
         let strafe = parameters[0]; // must be converted to 32-bit IEEE 754 float in payload
 
-        // Scale and limit thrust between -0.65 and 0.65 (maximums are -1, 1)  // OpenROV sends values 0-100 based on system power level    
+        // OpenROV sends values 0-100 based on system power level    
         strafe *= 0.01;  
-        //strafe = Math.max(strafe,-0.65);
-        //strafe = Math.min(strafe, 0.65);
+        strafe = Math.max(strafe,-1.0);
+        strafe = Math.min(strafe, 1.0);
 
         // Update state variable(s)
         if (self.motorControl.motors[1].reverse == true) {
