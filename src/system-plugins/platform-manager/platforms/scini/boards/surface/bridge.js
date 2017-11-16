@@ -736,8 +736,9 @@ class Bridge extends EventEmitter
 
         // Scale and limit thrust between -0.65 and 0.65 (maximums are -1, 1)  // OpenROV sends values 0-100 based on system power level    
         thrust *= 0.01;  
-        thrust = Math.max(thrust,-0.65);
-        thrust = Math.min(thrust, 0.65);
+        // the following lines may be used to create a hard thruster limit
+        //thrust = Math.max(thrust,-0.65);
+        //thrust = Math.min(thrust, 0.65);
 
         // Update state variable(s)
         if (self.motorControl.motors[0].reverse == true) {
@@ -748,7 +749,7 @@ class Bridge extends EventEmitter
         }
 
         // DEBUG: dump values sent by OpenROV
-        logger.debug('Throttle value: ' + thrust);
+        logger.debug('Sending throttle update: ' + thrust);
         // Ack command
         self.emitStatus('throttle: ' + thrust );
         break;
@@ -761,8 +762,8 @@ class Bridge extends EventEmitter
         // Scale and limit thrust between -0.65 and 0.65 (maximums are -1, 1)  
         // OpenROV sends values 0-100 based on system power level
         yaw *= 0.01;  
-        yaw = Math.max(yaw,-0.65);
-        yaw = Math.min(yaw, 0.65);
+        //yaw = Math.max(yaw,-0.65);
+        //yaw = Math.min(yaw, 0.65);
 
         // Update state variable(s)
         if (self.motorControl.motors[1].reverse == true) {
@@ -772,9 +773,9 @@ class Bridge extends EventEmitter
           self.motorControl.motors[1].value = yaw;         
         }
         
-        logger.debug('Sending yaw update: ' + command);
+        logger.debug('Sending yaw update: ' + yaw);
         // Ack command
-        self.emitStatus('yaw:' + parameters[0] );
+        self.emitStatus('yaw:' + yaw );
         break;
       }
 
@@ -784,8 +785,8 @@ class Bridge extends EventEmitter
 
         // Scale and limit thrust between -0.65 and 0.65 (maximums are -1, 1)  // OpenROV sends values 0-100 based on system power level    
         lift *= 0.01;  
-        lift = Math.max(lift,-0.65);
-        lift = Math.min(lift, 0.65);
+        //lift = Math.max(lift,-0.65);
+        //lift = Math.min(lift, 0.65);
 
         // Update state variable(s)
         if (self.motorControl.motors[2].reverse == true) {
@@ -801,9 +802,9 @@ class Bridge extends EventEmitter
           self.motorControl.motors[4].value = lift;         
         }
 
-        logger.debug('Sending lift update: ' + command);
+        logger.debug('Sending lift update: ' + lift);
         // Ack command
-        self.emitStatus('lift:' + parameters[0] );
+        self.emitStatus('lift:' + lift );
         break;
       }
 
@@ -813,8 +814,8 @@ class Bridge extends EventEmitter
 
         // Scale and limit thrust between -0.65 and 0.65 (maximums are -1, 1)  // OpenROV sends values 0-100 based on system power level    
         pitch *= 0.01;  
-        pitch = Math.max(pitch,-0.65);
-        pitch = Math.min(pitch, 0.65);
+        //pitch = Math.max(pitch,-0.65);
+        //pitch = Math.min(pitch, 0.65);
 
         // Update state variable(s)
         if (self.motorControl.motors[4].reverse == true) {
@@ -824,9 +825,9 @@ class Bridge extends EventEmitter
           self.motorControl.motors[4].value = pitch;         
         }
 
-        logger.debug('Sending pitch update: ' + command);
+        logger.debug('Sending pitch update: ' + pitch);
         // Ack command
-        self.emitStatus('pitch:' + parameters[0] );
+        self.emitStatus('pitch:' + pitch );
         break;
       }
 
@@ -837,8 +838,8 @@ class Bridge extends EventEmitter
 
         // Scale and limit thrust between -0.65 and 0.65 (maximums are -1, 1)  // OpenROV sends values 0-100 based on system power level    
         strafe *= 0.01;  
-        strafe = Math.max(strafe,-0.65);
-        strafe = Math.min(strafe, 0.65);
+        //strafe = Math.max(strafe,-0.65);
+        //strafe = Math.min(strafe, 0.65);
 
         // Update state variable(s)
         if (self.motorControl.motors[1].reverse == true) {
@@ -854,9 +855,9 @@ class Bridge extends EventEmitter
           self.motorControl.motors[3].value = strafe;         
         }
         
-        logger.debug('Sending strafe update: ' + command);
+        logger.debug('Sending strafe update: ' + strafe);
         // Ack command
-        self.emitStatus('strafe:' + parameters[0] );
+        self.emitStatus('strafe:' + strafe );
         break;
       }
 
