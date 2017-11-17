@@ -675,42 +675,91 @@ class Bridge extends EventEmitter
       }
 
       // forward thrust modifier - used for reverse flag detection
-      // modifiers not implemented right now
       case 'mtrmod1':
       {
         // Order of parameter values:
         // thruster, vertical, starboard, aftvertical, aftstarboard
         // Ack command (ex: mtrmod1(100,100,-100,100,-100));
-        if (parameters[0] < 0)
+        if (parameters[0] < 0) {
           this.motorControl.motors[0].reverse = true;
-        else
+          this.motorControl.motors[0].fwdMod = parameters[0] * 0.01;
+        }
+        else {
           this.motorControl.motors[0].reverse = false;
-        if (parameters[1] < 0)
+          this.motorControl.motors[0].fwdMod = parameters[0] * 0.01;
+        }
+        if (parameters[1] < 0) {
           this.motorControl.motors[4].reverse = true;
-        else
+          this.motorControl.motors[4].fwdMod = parameters[1] * 0.01;
+        }
+        else {
           this.motorControl.motors[4].reverse = false;
-        if (parameters[2] < 0)
+          this.motorControl.motors[4].fwdMod = parameters[1] * 0.01;
+        }
+        if (parameters[2] < 0) {
           this.motorControl.motors[3].reverse = true;
-        else
+          this.motorControl.motors[3].fwdMod = parameters[2] * 0.01;
+        }
+        else {
           this.motorControl.motors[3].reverse = false;
-        if (parameters[3] < 0)
+          this.motorControl.motors[3].fwdMod = parameters[2] * 0.01;
+        }
+        if (parameters[3] < 0) {
           this.motorControl.motors[2].reverse = true;
-        else
+          this.motorControl.motors[2].fwdMod = parameters[3] * 0.01;
+        }   
+        else {
           this.motorControl.motors[2].reverse = false;
-        if (parameters[4] < 0)
+          this.motorControl.motors[2].fwdMod = parameters[3] * 0.01;
+        }
+        if (parameters[4] < 0) {
           this.motorControl.motors[1].reverse = true;
-        else
+          this.motorControl.motors[1].fwdMod = parameters[4] * 0.01;
+        }
+        else {
           this.motorControl.motors[1].reverse = false;
-        
+          this.motorControl.motors[1].fwdMod = parameters[4] * 0.01;
+        }
+
         this.emitStatus('mtrmod1:' + parameters[0] );
         break;
       }
 
       // reverse thrust modifier
-      // modifiers not implemented right now
       case 'mtrmod2':
       {
         // Ack command (ex: mtrmod2(200,200,-200,200,-200));
+        if (parameters[0] < 0) {
+          this.motorControl.motors[0].revMod = parameters[0] * 0.01;
+        }
+        else {
+          this.motorControl.motors[0].revMod = parameters[0] * 0.01;
+        }
+        if (parameters[1] < 0) {
+          this.motorControl.motors[4].revMod = parameters[1] * 0.01;
+        }
+        else {
+          this.motorControl.motors[4].revMod = parameters[1] * 0.01;
+        }
+        if (parameters[2] < 0) {
+          this.motorControl.motors[3].revMod = parameters[2] * 0.01;
+        }
+        else {
+          this.motorControl.motors[3].revMod = parameters[2] * 0.01;
+        }
+        if (parameters[3] < 0) {
+          this.motorControl.motors[2].revMod = parameters[3] * 0.01;
+        }   
+        else {
+          this.motorControl.motors[2].revMod = parameters[3] * 0.01;
+        }
+        if (parameters[4] < 0) {
+          this.motorControl.motors[1].revMod = parameters[4] * 0.01;
+        }
+        else {
+          this.motorControl.motors[1].revMod = parameters[4] * 0.01;
+        }
+
         this.emitStatus('mtrmod2:' + parameters[0] );
         break;
       }
@@ -804,12 +853,24 @@ class Bridge extends EventEmitter
       case 'lift':
       {
         let lift = parameters[0]; // must be converted to 32-bit IEEE 754 float in payload
-
+        let lift2 = parameters[0]; // supports thruster modifiers
+  
         // OpenROV sends values 0-100 based on system power level    
         lift *= 0.01;
+        lift2 *= 0.01;
+        if (lift > 0) {
+          lift *= self.motorControl.motors[2].fwdMod;
+          lift2 *= self.motorControl.motors[4].fwdMod;          
+        }
+        if (lift < 0) {
+          lift *= self.motorControl.motors[2].revMod;
+          lift2 *= self.motorControl.motors[4].revMod; 
+        }
         lift = Math.max(lift,-1.0);
         lift = Math.min(lift, 1.0);
-
+        lift2 = Math.max(lift2,-1.0);
+        lift2 = Math.min(lift2, 1.0);               
+        
         // Update state variable(s)
         if (self.motorControl.motors[2].reverse == true) {
           self.motorControl.motors[2].value = lift * -1;          
@@ -818,10 +879,10 @@ class Bridge extends EventEmitter
           self.motorControl.motors[2].value = lift;         
         }
         if (self.motorControl.motors[4].reverse == true) {
-          self.motorControl.motors[4].value = lift * -1;          
+          self.motorControl.motors[4].value = lift2 * -1;          
         }
         else {
-          self.motorControl.motors[4].value = lift;         
+          self.motorControl.motors[4].value = lift2;         
         }
 
         logger.debug('Sending lift update: ' + lift);
@@ -863,11 +924,23 @@ class Bridge extends EventEmitter
       { 
 
         let strafe = parameters[0]; // must be converted to 32-bit IEEE 754 float in payload
+        let strafe2 = parameters[0]; // supports thruster modifiers
 
         // OpenROV sends values 0-100 based on system power level    
         strafe *= 0.01;  
+        strafe2 *= 0.01;
+        if (strafe > 0) {
+          strafe *= self.motorControl.motors[1].fwdMod;
+          strafe2 *= self.motorControl.motors[3].fwdMod;          
+        }
+        if (strafe < 0) {
+          strafe *= self.motorControl.motors[1].revMod;
+          strafe2 *= self.motorControl.motors[3].revMod; 
+        }
         strafe = Math.max(strafe,-1.0);
         strafe = Math.min(strafe, 1.0);
+        strafe2 = Math.max(strafe2,-1.0);
+        strafe2 = Math.min(strafe2, 1.0);
 
         // Update state variable(s)
         if (self.motorControl.motors[1].reverse == true) {
@@ -877,10 +950,10 @@ class Bridge extends EventEmitter
           self.motorControl.motors[1].value = strafe;         
         }
         if (self.motorControl.motors[3].reverse == true) {
-          self.motorControl.motors[3].value = strafe * -1;          
+          self.motorControl.motors[3].value = strafe2 * -1;          
         }
         else {
-          self.motorControl.motors[3].value = strafe;         
+          self.motorControl.motors[3].value = strafe2;         
         }
         
         logger.debug('Sending strafe update: ' + strafe);
