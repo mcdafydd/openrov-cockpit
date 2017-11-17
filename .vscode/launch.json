@@ -26,7 +26,6 @@
 				"MOCK_VIDEO_TYPE": "GEOMUX",
 				"MOCK_VIDEO_HARDWARE": "false",
 				"DEBUG": "bridge, mcu, cpu, *:Notifications, app:mjpeg*",
-				"port": 8080,
 				"configfile": "/tmp/rovconfig.json",
 				"plugins__ui-manager__selectedUI": "new-ui",
 				"pluginsDownloadDirectory": "/tmp/plugins",

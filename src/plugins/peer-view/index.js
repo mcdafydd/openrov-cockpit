@@ -26,7 +26,7 @@ function peerview(name, deps) {
     });
     socket.on('signal', function (id, data) {
       //socket.broadcast.to(id).emit('signal', data, socket.id);
-      connections[id].emit('signal', data, socket.id);
+      connections[this.id].emit('signal', data, socket.id);
     });
     socket.on('peer-connect-offer', function (peer_id, callback) {
       //We intentionally swap out the target's id for the sender's id.

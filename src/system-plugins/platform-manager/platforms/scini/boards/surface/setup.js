@@ -15,7 +15,8 @@ var SetupBoardInterface = function(board)
 
     // Decorate the MCU interface with board specific properties
     // board.physics         = new ArduinoHelper().physics;
-    board.bridge = new Bridge('127.0.0.1');
+    // pass board.global to hand server bus events to Bridge
+    board.bridge = new Bridge('127.0.0.1', board.global);
 
     board.statusdata = {};
 
