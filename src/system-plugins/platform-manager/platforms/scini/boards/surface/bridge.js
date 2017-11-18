@@ -834,7 +834,7 @@ class Bridge extends EventEmitter
           yaw *= self.motorControl.motors[1].revMod;
         }
         yaw = Math.max(yaw,-1.0);
-        yaw = Math.min(yaw, 1.0);
+        yaw = Math.min(yaw, 1.0); 
 
         // Update state variable(s)
         if (self.motorControl.motors[1].reverse == true) {

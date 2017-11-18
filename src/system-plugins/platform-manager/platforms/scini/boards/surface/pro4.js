@@ -34,7 +34,6 @@
 const logger        = require('AppFramework.js').logger;
 const Parser        = require('binary-parser').Parser;
 const CRC           = require('crc');
-const pro4Payloads  = require('./pro4Payloads');
 
 // ******************************************************************
 //  Device types are defined by VideoRay
@@ -190,7 +189,17 @@ class Pro4
       .floatle('adc12v')            
       .floatle('kellerTemperature')      
       .floatle('kellerPressure')
-      .uint8('kellerStatus');
+      .uint8('kellerStatus')
+      .uint8('pad')
+      .int16le('accel_x')
+      .int16le('accel_y')
+      .int16le('accel_z')
+      .int16le('angle_x')
+      .int16le('angle_y')
+      .int16le('angle_z')
+      .int16le('rot_x')
+      .int16le('rot_y')
+      .int16le('rot_z')
   }
 
   // Encode PRO4 request and calculate checksum
@@ -346,4 +355,4 @@ class Pro4
 module.exports = {
   Pro4: Pro4,
   constants: constants
-
+}
