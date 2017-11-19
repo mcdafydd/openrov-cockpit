@@ -301,28 +301,35 @@ class Bridge extends EventEmitter
     this.client.on('message', (topic, message) => {
       // message is a Buffer object, send to decoder
       logger.debug('BRIDGE: Received MQTT on topic ' + topic);
-      logger.debug('BRIDGE: Raw MQTT message = ' + message.toString('hex'));  
-      let parsedObj = this.parser.decode(message);
-      // send response data to telemetry plugin
-      // all that is required is to send a text string of "key:value" 
-      // to emitStatus(status)
-      if (parsedObj.hasOwnProperty('id') 
-          && parsedObj.hasOwnProperty('payload')
-          && parsedObj.hasOwnProperty('type')) {
-            let parentId = parsedObj.type + parsedObj.id.toString();
-            for (let prop in parsedObj.payload) {
-              // skip the uninteresting stuff
-              if (prop === 'scni' 
-                  || prop === 'len'
-                  || prop === 'deviceType'
-                  || prop === 'cmd') {
-                    continue;
-                }
-              let value = parsedObj.payload[prop];          
-              let telemetryId = parentId + '.' + prop;
-              this.emitStatus(telemetryId + ':' + value + ';');
-            }
-      }
+      logger.debug('BRIDGE: Raw MQTT message = ' + message.toString('hex'));
+      // check message.length and ignore partial PRO4 payloads
+      logger.debug('Message length = ' + message.length);
+      let testForEmptyMessage = new Buffer.alloc(message.length);
+      let comp = testForEmptyMessage.compare(message);
+      // ignore short messages and messages that only contain zero values
+      if (message.length > 5 && comp != 0) {
+        let parsedObj = this.parser.decode(message);
+        // send response data to telemetry plugin
+        // all that is required is to send a text string of "key:value" 
+        // to emitStatus(status)
+        if (parsedObj.hasOwnProperty('id') 
+            && parsedObj.hasOwnProperty('payload')
+            && parsedObj.hasOwnProperty('type')) {
+              let parentId = parsedObj.type + parsedObj.id.toString();
+              for (let prop in parsedObj.payload) {
+                // skip the uninteresting stuff
+                if (prop === 'scni' 
+                    || prop === 'len'
+                    || prop === 'deviceType'
+                    || prop === 'cmd') {
+                      continue;
+                  }
+                let value = parsedObj.payload[prop];          
+                let telemetryId = parentId + '.' + prop;
+                this.emitStatus(telemetryId + ':' + value + ';');
+              }
+        }
+      } 
     });
 
     this.client.on('error', (err) => {
@@ -411,12 +418,6 @@ class Bridge extends EventEmitter
     let commandText   = commandParts[0];
     let parameters    = commandParts[ 1 ].split( ',' );
 
-    // this could be where the device-specific protocol translation occurs
-    // (ie: PRO4)
-    // Need code to map messages to appropriate topics 
-    // and PRO4 packets
-
-    // Simulate the receipt of the above command
     switch (commandText) 
     {
       case 'version': 
@@ -484,7 +485,6 @@ class Bridge extends EventEmitter
           // Set the current depth as the offset
           this.sensors.depth.depthOffset = this.sensors.depth.depth;
           this.emitStatus(`depth_zero:ack;`);
-
           break;
       }
 
@@ -493,7 +493,6 @@ class Bridge extends EventEmitter
           // Set the depth offset to 0
           this.sensors.depth.depthOffset = 0;
           this.emitStatus(`depth_clroff:ack;`);
-
           break;
       }
 
@@ -501,7 +500,6 @@ class Bridge extends EventEmitter
       {
           this.sensors.depth.waterType = parseInt( parameters[0] );
           this.emitStatus(`depth_water:${this.sensors.depth.waterType};`);
-
           break;
       }
 
@@ -658,19 +656,19 @@ class Bridge extends EventEmitter
 
       case 'gripper_open': 
       {
-        this.emitStatus('gripper_open:' + parameters[0]);
+        this.emitStatus('gripper.gripper_open:' + parameters[0]);
         break;
       }
 
       case 'gripper_close': 
       {
-        this.emitStatus('gripper_close:' + parameters[0]);
+        this.emitStatus('gripper.gripper_close:' + parameters[0]);
         break;
       }
 
       case 'gripper_stationary': 
       {
-        this.emitStatus('gripper_stationary:' + parameters[0]);
+        this.emitStatus('gripper.gripper_stationary:' + parameters[0]);
         break;
       }
 
@@ -721,7 +719,7 @@ class Bridge extends EventEmitter
           this.motorControl.motors[1].fwdMod = parameters[4] * 0.01;
         }
 
-        this.emitStatus('mtrmod1:' + parameters[0] );
+        this.emitStatus('motors.mtrmod1:' + parameters );
         break;
       }
 
@@ -759,8 +757,8 @@ class Bridge extends EventEmitter
         else {
           this.motorControl.motors[1].revMod = parameters[4] * 0.01;
         }
-
-        this.emitStatus('mtrmod2:' + parameters[0] );
+        
+        this.emitStatus('motors.mtrmod2:' + parameters );
         break;
       }
 
@@ -817,7 +815,7 @@ class Bridge extends EventEmitter
         // DEBUG: dump values sent by OpenROV
         logger.debug('Sending throttle update: ' + thrust);
         // Ack command
-        self.emitStatus('throttle: ' + thrust );
+        self.emitStatus('motors.throttle: ' + thrust );
         break;
       }
 
@@ -846,7 +844,7 @@ class Bridge extends EventEmitter
         
         logger.debug('Sending yaw update: ' + yaw);
         // Ack command
-        self.emitStatus('yaw:' + yaw );
+        self.emitStatus('motors.yaw:' + yaw );
         break;
       }
 
@@ -887,7 +885,7 @@ class Bridge extends EventEmitter
 
         logger.debug('Sending lift update: ' + lift);
         // Ack command
-        self.emitStatus('lift:' + lift );
+        self.emitStatus('motors.lift:' + lift );
         break;
       }
 
@@ -916,7 +914,7 @@ class Bridge extends EventEmitter
 
         logger.debug('Sending pitch update: ' + pitch);
         // Ack command
-        self.emitStatus('pitch:' + pitch );
+        self.emitStatus('motors.pitch:' + pitch );
         break;
       }
 
@@ -958,7 +956,7 @@ class Bridge extends EventEmitter
         
         logger.debug('Sending strafe update: ' + strafe);
         // Ack command
-        self.emitStatus('strafe:' + strafe );
+        self.emitStatus('motors.strafe:' + strafe );
         break;
       }
 
@@ -1001,14 +999,13 @@ class Bridge extends EventEmitter
   parseStatus( rawStatus )
   {
     let parts   = rawStatus.trim().split( ':' );
-    
+    let status = {};
+
     if( parts.length === 2 )
     {
       if( !isNaN( parts[ 1 ] ) )
       {
-        let status = {};
         status[ parts[ 0 ] ] = parts[ 1 ];
-        return status;
       }
       else
       {
@@ -1016,9 +1013,10 @@ class Bridge extends EventEmitter
       }
     }
 
-    return null;
+    return status;
   }
 
+  // send data to telemetry plugin
   emitStatus( status )
   {
     let txtStatus = this.parseStatus(status);
@@ -1027,7 +1025,7 @@ class Bridge extends EventEmitter
     {
       txtStatus={};
     }
-    this.emit('status', txtStatus);
+    this.globalBus.emit('mcu.status', txtStatus);
 
     if (this.emitRawSerial) 
     {
@@ -1393,6 +1391,8 @@ class Bridge extends EventEmitter
       result += 'time:' + this.sensors.ps.time + ';';
       result += 'baro_p:' + this.sensors.ps.baro_p + ';';
       result += 'baro_t:' + this.sensors.ps.baro_t + ';';
+
+      this.emitStatus(result);
   }
 }
 

@@ -124,7 +124,7 @@ class Pro4
           // 'this' context not accessible here
           // matches SYNC_REQUEST8LE or SYNC_REQUEST32LE or "mqttClientConnected"
           if (!(x === 0xdffd || x === 0x0ff0 || x === 29037)) {
-              logger.warn('PRO4: Partial or non-PRO4 packet sent to parser');
+              console.log('PRO4: Partial or non-PRO4 packet sent to parser');
           } 
           return true; // always return true to prevent interruption
         } 
