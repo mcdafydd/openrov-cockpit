@@ -106,7 +106,7 @@ class Bridge extends EventEmitter
       },
       pro4:             {
         pro4Sync:       pro4.constants.SYNC_REQUEST8LE,
-        pro4Addresses:  [0x31],     // XXX - set these correctly
+        pro4Addresses:  [0x31,0x32,0x33,0x41,0x42,0x43],     
         flags:          0x00,       // or 0x80  
         csrAddress:     0xf0,       // custom command address
         lenNoop:        6,          // no write, just read all values
