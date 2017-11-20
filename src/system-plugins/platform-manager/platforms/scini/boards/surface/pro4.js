@@ -88,7 +88,9 @@ const constants = {
   ADDR_DEVICE_ID: 0xFD, // returns factory unique ID
   ADDR_UTILITY: 0xFE,
   ADDR_REBOOT: 0xFE,
-  REBOOT_CODE: 0xADDE  // LSB First
+  REBOOT_CODE: 0xADDE,  // LSB First
+  STATUS_SUCCESS: 1,    // PRO4 parser success - used by bridge state machine
+  STATUS_ERROR: 2       // PRO4 parser error - used by bridge state machine
 }; 
 
 class Pro4
@@ -103,19 +105,11 @@ class Pro4
     // Define a parser for the board information stored on the controller board's eeprom
     this.ParserCrc8 = new Parser()
       .endianess('little')
-      .uint8('id')
-      .uint8('flags')
-      .uint8('csrAddress')
-      .uint8('payloadLength')
       .uint8('headerCrc');
 
     this.ParserCrc32 = new Parser()
-    .endianess('little')
-    .uint8('id')
-    .uint8('flags')
-    .uint8('csrAddress')
-    .uint8('payloadLength')
-    .uint32('headerCrc');
+      .endianess('little')
+      .uint32('headerCrc');
 
     this.ParserHead = new Parser()
       .endianess('little')
@@ -129,15 +123,18 @@ class Pro4
           return true; // always return true to prevent interruption
         } 
       })
+      .uint8('id')
+      .uint8('flags')
+      .uint8('csrAddress')
+      .uint8('payloadLength')
       .choice('crcType', {
         tag: 'sync',
+        defaultChoice: this.stop,
         choices: {
           // 0xfddf response (arrives as 0xdffd)
           57341: Parser.start().nest('crc8', { type: this.ParserCrc8 }),
           // 0xf00f response (arrives as 0x0ff0)
-          4080: Parser.start().nest('crc32', { type: this.ParserCrc32 }),
-          // client joined - publishes mqttClientConnected
-          29037: this.stop
+          4080: Parser.start().nest('crc32', { type: this.ParserCrc32 })
         }
       })
 
@@ -159,6 +156,40 @@ class Pro4
       .float('temp')
       .uint8('fault');
 
+    // SCINI crumb644 PRO4 response payload
+    // Pre-IMU payload
+    this.ParserBam44 = new Parser()
+      .string('scni', { length: 4 })
+      .uint8('len')
+      .uint8('cmd')
+      .uint16le('servo1')
+      .uint16le('servo2')
+      .uint8('gpioOut')
+      .uint8('gpioIn')
+      .array('acs764', {
+        type: 'floatle',
+        length: 4
+      })
+      .array('tmp102', {
+        type: 'floatle',
+        length: 4
+      })
+      .array('adcKelvin', {
+        type: 'floatle',
+        length: 2
+      })
+      .array('adcVolts', {
+        type: 'floatle',
+        length: 3
+      })
+      .floatle('adc48v')      
+      .floatle('adc24v')      
+      .floatle('adc12v')            
+      .floatle('kellerTemperature')      
+      .floatle('kellerPressure')
+      .uint8('kellerStatus')
+      .uint8('pad')
+      
     // SCINI crumb644 PRO4 response payload
     this.ParserBam = new Parser()
       .string('scni', { length: 4 })
@@ -255,18 +286,16 @@ class Pro4
     return buf;
   }
 
-  // Parse PRO4 response and validate checksum
-  decode(data)
+  // Parse PRO4 response header and validate checksum
+  decodeHead(data)
   {
     let self = this;
     let retVal;
     // parsed objects are big endian
     let obj = self.ParserHead.parse(data);
     let chksum = 0;
-    let headerCrcPass = true;
-    let totalCrcPass = true;
     let padding = 1;
-    
+    obj.status = STATUS_SUCCESS;  // communicate parser status to state machine
 
     if (obj.sync === self.constants.SYNC_RESPONSE32BE) {
       padding = 4;
@@ -278,8 +307,8 @@ class Pro4
     // validate header CRC
     if (obj.sync == self.constants.SYNC_RESPONSE32BE) {
       if (obj.crcType.crc32.headerCrc !== CRC.crc32(data.slice(0,6))) {
-        headerCrcPass = false;
-        logger.warn('BRIDGE: Bad header crc; possible id = ' + obj.crcType.crc32.id);
+        obj.status = STATUS_ERROR;
+        logger.warn('BRIDGE: Bad header crc; possible id = ' + obj.id);
       }
     }
     if (obj.sync == this.constants.SYNC_RESPONSE8BE) {
@@ -289,16 +318,34 @@ class Pro4
         chksum ^= data[i];
       }
       if (obj.crcType.crc8.headerCrc !== chksum) {
-        headerCrcPass = false;
-        logger.warn('BRIDGE: Bad header crc; possible id = ' + obj.crcType.crc8.id);
+        obj.status = STATUS_ERROR;
+        logger.warn('BRIDGE: Bad header crc; possible id = ' + obj.id);
       }   
     }
+    return obj;
+  }
+
+  decodeBody(obj, data)
+  {
+    let self = this;
+    let retVal;
+    let chksum = 0;
+    let padding = 1;
+    
+    obj.status = STATUS_SUCCESS;
+
+    if (obj.sync === self.constants.SYNC_RESPONSE32BE) {
+      padding = 4;
+    }
+    
+    let headerLen = this.constants.PROTOCOL_PRO4_HEADER_SIZE + padding;
+    let payloadLen = data.length - headerLen - padding;
 
     // validate total CRC
     if (obj.sync == this.constants.SYNC_RESPONSE32BE) {
       if (obj.crcType.crc32.headerCrc !== CRC.crc32(data.slice(headerLen,data.length-padding))) {
-        totalCrcPass = false;
-        logger.warn('BRIDGE: Bad total crc; possible id = ' + obj.crcType.crc32.id);
+        obj.status = STATUS_ERROR;
+        logger.warn('BRIDGE: Bad total crc; possible id = ' + obj.id);
       }
     }
     if (obj.sync == this.constants.SYNC_RESPONSE8BE) {
@@ -308,22 +355,20 @@ class Pro4
         chksum ^= data[i];
       }
       if (obj.crcType.crc8.headerCrc !== chksum) {
-        totalCrcPass = false;
-        logger.warn('BRIDGE: Bad total crc; possible id = ' + obj.crcType.crc8.id);
+        obj.status = STATUS_ERROR;
+        logger.warn('BRIDGE: Bad total crc; possible id = ' + obj.id);
       }
     }
 
-    if (headerCrcPass && totalCrcPass) {
+    if (obj.status == STATUS_SUCCESS) {
       // extract payload and send to parser
       // add to retVal object property
       let begin = 0;
       if (obj.sync == self.constants.SYNC_RESPONSE32LE) {
-        obj.id = obj.crcType.crc32.id;
-        begin = data.length - padding - obj.crcType.crc32.payloadLength;
+        begin = data.length - padding - obj.payloadLength;
       }
       if (obj.sync == self.constants.SYNC_RESPONSE8LE) {
-        obj.id = obj.crcType.crc8.id;
-        begin = data.length - padding - obj.crcType.crc8.payloadLength;
+        begin = data.length - padding - obj.payloadLength;
       }
       let end = data.length - padding;
       let payload = data.slice(begin, end);
@@ -337,18 +382,14 @@ class Pro4
         obj.type = 'lights';
         obj.payload = self.ParserLights.parse(payload);        
       }
-      else if ((obj.id >= 42 && obj.id <= 51)) {
+      else if ((obj.id >= 0x31 && obj.id <= 0x34) || 
+               (obj.id >= 0x41 && obj.id <= 0x44)) {
         obj.type = 'crumb';
         obj.payload = self.ParserBam.parse(payload);        
       }
-
-      retVal = obj;
-    }
-    else {
-      retVal = {};
     }
 
-    return retVal;
+    return obj;
   }
 }
 
