@@ -72,11 +72,11 @@ class Bridge extends EventEmitter
     // this object hold data and index for incoming MQTT messages
     this.clients = {}; // links clientId to their parserBuffer
     this.fsm = {};  // links clientId to their state machine
-    // these are used by the parser
-    this.pro4sync8be = new Buffer.from('faaf', 'hex');
-    this.pro4sync8le = new Buffer.from('fddf', 'hex');
-    this.pro4sync32be = new Buffer.from('f55f', 'hex');
-    this.pro4sync32le = new Buffer.from('f00f', 'hex');
+    // these are used by the parser - PRO4 response sync bytes
+    this.pro4sync8be = new Buffer.from('fddf', 'hex');
+    this.pro4sync8le = new Buffer.from('dffd', 'hex');
+    this.pro4sync32be = new Buffer.from('f00f', 'hex');
+    this.pro4sync32le = new Buffer.from('0ff0', 'hex');
     // *********** SCINI specific platform hardware request state *************
     this.sensors = {
       time:             0,
