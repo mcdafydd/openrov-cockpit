@@ -72,6 +72,11 @@ class Bridge extends EventEmitter
     // this object hold data and index for incoming MQTT messages
     this.clients = {}; // links clientId to their parserBuffer
     this.fsm = {};  // links clientId to their state machine
+    // these are used by the parser
+    this.pro4sync8be = new Buffer.from('faaf', 'hex');
+    this.pro4sync8le = new Buffer.from('fddf', 'hex');
+    this.pro4sync32be = new Buffer.from('f55f', 'hex');
+    this.pro4sync32le = new Buffer.from('f00f', 'hex');
     // *********** SCINI specific platform hardware request state *************
     this.sensors = {
       time:             0,
@@ -381,35 +386,52 @@ class Bridge extends EventEmitter
           {
             case '_s_init':
             {
+              let idx32 = this.clients[clientId].parseBuffer.indexOf(this.pro4sync32le);
+              let idx8b = this.clients[clientId].parseBuffer.indexOf(this.pro4sync8be);
+              let idx8l = this.clients[clientId].parseBuffer.indexOf(this.pro4sync8le);
               // assumes that sending more than required data is OK and is ignored by parser
-              if (this.clients[clientId].parseBuffer.readUInt16BE(0) == pro4.constants.SYNC_RESPONSE32LE &&
-                  this.clients[clientId].bufIdx - this.clients[clientId].parseIdx >= 10)
+              if (idx32 >= 0 && this.clients[clientId].bufIdx 
+                  - this.clients[clientId].parseIdx + idx32 >= 10)
               {
+                this.clients[clientId].parseIdx += idx32;
                 this.clients[clientId].parsedHeader = this.parser.decodeHead(this.clients[clientId].parseBuffer.slice
                   (this.clients[clientId].parseIdx, this.clients[clientId].bufIdx));
-                this.clients[clientId].parseIdx += 10;
                 this.fsm[clientId].ValidateHeader();
               }
-              else if (this.clients[clientId].parseBuffer.readUInt16BE(0) == pro4.constants.SYNC_RESPONSE32LE &&
-                        this.clients[clientId].bufIdx - this.clients[clientId].parseIdx < 10)
+              else if (idx32 >= 0 && this.clients[clientId].bufIdx 
+                        - this.clients[clientId].parseIdx + idx32 < 10)
               {
                 // likely valid data, just not enough of it yet
-                this.clients[clientId].parseIdx += this.clients[clientId].bufIdx;
+                // drop any leading non-packet bytes
+                if (idx32 > 0)
+                {
+                  this.clients[clientId].parseBuffer = 
+                      this.clients[clientId].parseBuffer.slice(idx32);
+                }
+                this.clients[clientId].parseIdx = 0;
+                this.clients[clientId].bufIdx -= idx32;
                 this.fsm[clientId].GetMoreHeaderData();
               }
-              else if (this.clients[clientId].parseBuffer.readUInt16BE(0) == pro4.constants.SYNC_RESPONSE8BE &&
-                        this.clients[clientId].bufIdx - this.clients[clientId].parseIdx >= 7)
+              else if (idx8b >= 0 && this.clients[clientId].bufIdx
+                        - this.clients[clientId].parseIdx + idx8b >= 7)
               {
+                this.clients[clientId].parseIdx += idx8b;
                 this.clients[clientId].parsedHeader = this.parser.decodeHead(this.clients[clientId].parseBuffer.slice
                   (this.clients[clientId].parseIdx, this.clients[clientId].bufIdx));
-                this.clients[clientId].parseIdx += 7;
                 this.fsm[clientId].ValidateHeader();
               }
-              else if (this.clients[clientId].parseBuffer.readUInt16BE(0) == pro4.constants.SYNC_RESPONSE8BE &&
-                        this.clients[clientId].bufIdx - this.clients[clientId].parseIdx < 7)
+              else if (idx8b >= 0 && this.clients[clientId].bufIdx
+                - this.clients[clientId].parseIdx + idx8b < 7)
               {
                 // likely valid data, just not enough of it yet
-                this.clients[clientId].parseIdx = this.clients[clientId].bufIdx;
+                // drop any leading non-packet bytes
+                if (idx8b > 0)
+                {
+                  this.clients[clientId].parseBuffer = 
+                      this.clients[clientId].parseBuffer.slice(idx8b);
+                }
+                this.clients[clientId].parseIdx = 0;
+                this.clients[clientId].bufIdx -= idx8b;
                 this.fsm[clientId].GetMoreHeaderData();
               }
               else  // not PRO4 data in _s_init, drop it and reset state
@@ -424,13 +446,14 @@ class Bridge extends EventEmitter
             case '_s_pre_head':
             {
               // keep reading data
+              // assumes that if we're here, byte 0 of the next packet will be a continuation
+              // of the previous
               // assumes that sending more than required data is OK and is ignored by parser
               if (this.clients[clientId].parseBuffer.readInt16BE(0) == pro4.constants.SYNC_RESPONSE32LE &&
                   this.clients[clientId].bufIdx - this.clients[clientId].parseIdx >= 10)
               {
                 this.clients[clientId].parsedHeader = this.parser.decodeHead(this.clients[clientId].parseBuffer.slice
                   (this.clients[clientId].parseIdx, this.clients[clientId].bufIdx));
-                this.clients[clientId].parseIdx += 10;
                 this.fsm[clientId].ValidateHeader();
               }
               else if (this.clients[clientId].parseBuffer.readInt16BE(0) == pro4.constants.SYNC_RESPONSE32LE &&
@@ -438,14 +461,12 @@ class Bridge extends EventEmitter
               {
                 // likely valid data, just not enough of it yet
                 this.clients[clientId].parseIdx += this.clients[clientId].bufIdx;
-                this.fsm[clientId].GetMoreHeaderData();
               }
               else if (this.clients[clientId].parseBuffer.readInt16BE(0) == pro4.constants.SYNC_RESPONSE8BE &&
                         this.clients[clientId].bufIdx - this.clients[clientId].parseIdx >= 7)
               {
                 this.clients[clientId].parsedHeader = this.parser.decodeHead(this.clients[clientId].parseBuffer.slice
                   (this.clients[clientId].parseIdx, this.clients[clientId].bufIdx));
-                this.clients[clientId].parseIdx += 7;
                 this.fsm[clientId].ValidateHeader();
               }
               else if (this.clients[clientId].parseBuffer.readInt16BE(0) == pro4.constants.SYNC_RESPONSE8BE &&
@@ -453,7 +474,6 @@ class Bridge extends EventEmitter
               {
                 // likely valid data, just not enough of it yet
                 this.clients[clientId].parseIdx = this.clients[clientId].bufIdx;
-                this.fsm[clientId].GetMoreHeaderData()
               }
               break;
             }
@@ -469,6 +489,14 @@ class Bridge extends EventEmitter
               if (status == pro4.constants.STATUS_SUCCESS)
               {
                 loop_count += 1;
+                if (parsedObj.sync == pro4.constants.SYNC_RESPONSE32LE)
+                {
+                  this.clients[clientId].parseIdx += 10;                  
+                }
+                else if (parsedObj.sync == pro4.constants.SYNC_RESPONSE8BE)
+                {
+                  this.clients[clientId].parseIdx += 7;                  
+                }
                 this.fsm[clientId].GetBody();
               }
               else
@@ -533,6 +561,8 @@ class Bridge extends EventEmitter
               // send response data to telemetry plugin
               // all that is required is to send a text string of "key:value" 
               // to emitStatus(status)
+              let value = 0;
+              let telemetryId = '';
               let parsedObj = this.clients[clientId].parsedBody;
               if (parsedObj.hasOwnProperty('id') 
                   && parsedObj.hasOwnProperty('payload')
@@ -552,14 +582,18 @@ class Bridge extends EventEmitter
                   if (typeof(prop) == 'object')
                   {
                     // cycle through objects and emit separately
+                    for (let i = 0; i < prop.length; i++)
+                    {
+                      value = parsedObj.payload[prop][i];
+                      telemetryId = parentId + '.' + prop + i;
+                    }
                   }
                   else
                   {
-                    let value = parsedObj.payload[prop];          
-                    let telemetryId = parentId + '.' + prop;
-                    this.emitStatus(telemetryId + ':' + value);
+                    value = parsedObj.payload[prop];          
+                    telemetryId = parentId + '.' + prop;
                   }
-                                      
+                  this.emitStatus(telemetryId + ':' + value);
                 }
               }
               // reset state
