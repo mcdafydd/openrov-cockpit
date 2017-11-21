@@ -382,7 +382,7 @@ class Bridge extends EventEmitter
             case '_s_init':
             {
               // assumes that sending more than required data is OK and is ignored by parser
-              if (this.clients[clientId].parseBuffer.readUInt16BE(0) == pro4.constants.SYNC_RESPONSE32BE &&
+              if (this.clients[clientId].parseBuffer.readUInt16BE(0) == pro4.constants.SYNC_RESPONSE32LE &&
                   this.clients[clientId].bufIdx - this.clients[clientId].parseIdx >= 10)
               {
                 this.clients[clientId].parsedHeader = this.parser.decodeHead(this.clients[clientId].parseBuffer.slice
@@ -390,7 +390,7 @@ class Bridge extends EventEmitter
                 this.clients[clientId].parseIdx += 10;
                 this.fsm[clientId].ValidateHeader();
               }
-              else if (this.clients[clientId].parseBuffer.readUInt16BE(0) == pro4.constants.SYNC_RESPONSE32BE &&
+              else if (this.clients[clientId].parseBuffer.readUInt16BE(0) == pro4.constants.SYNC_RESPONSE32LE &&
                         this.clients[clientId].bufIdx - this.clients[clientId].parseIdx < 10)
               {
                 // likely valid data, just not enough of it yet
@@ -425,7 +425,7 @@ class Bridge extends EventEmitter
             {
               // keep reading data
               // assumes that sending more than required data is OK and is ignored by parser
-              if (this.clients[clientId].parseBuffer.readInt16BE(0) == pro4.constants.SYNC_RESPONSE32BE &&
+              if (this.clients[clientId].parseBuffer.readInt16BE(0) == pro4.constants.SYNC_RESPONSE32LE &&
                   this.clients[clientId].bufIdx - this.clients[clientId].parseIdx >= 10)
               {
                 this.clients[clientId].parsedHeader = this.parser.decodeHead(this.clients[clientId].parseBuffer.slice
@@ -433,7 +433,7 @@ class Bridge extends EventEmitter
                 this.clients[clientId].parseIdx += 10;
                 this.fsm[clientId].ValidateHeader();
               }
-              else if (this.clients[clientId].parseBuffer.readInt16BE(0) == pro4.constants.SYNC_RESPONSE32BE &&
+              else if (this.clients[clientId].parseBuffer.readInt16BE(0) == pro4.constants.SYNC_RESPONSE32LE &&
                         this.clients[clientId].bufIdx - this.clients[clientId].parseIdx < 10)
               {
                 // likely valid data, just not enough of it yet
@@ -486,7 +486,7 @@ class Bridge extends EventEmitter
               let parsedObj = this.clients[clientId].parsedHeader;
               let padding = 1;
 
-              if (parsedObj.sync === pro4.constants.SYNC_RESPONSE32BE) {
+              if (parsedObj.sync == pro4.constants.SYNC_RESPONSE32LE) {
                 padding = 4;
               }
 
