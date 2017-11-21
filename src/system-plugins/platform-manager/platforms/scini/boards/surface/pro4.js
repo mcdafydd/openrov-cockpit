@@ -295,7 +295,7 @@ class Pro4
     let obj = self.ParserHead.parse(data);
     let chksum = 0;
     let padding = 1;
-    obj.status = STATUS_SUCCESS;  // communicate parser status to state machine
+    obj.status = this.constants.STATUS_SUCCESS;  // communicate parser status to state machine
 
     if (obj.sync === self.constants.SYNC_RESPONSE32BE) {
       padding = 4;
@@ -307,7 +307,7 @@ class Pro4
     // validate header CRC
     if (obj.sync == self.constants.SYNC_RESPONSE32BE) {
       if (obj.crcType.crc32.headerCrc !== CRC.crc32(data.slice(0,6))) {
-        obj.status = STATUS_ERROR;
+        obj.status = this.constants.STATUS_ERROR;
         logger.warn('BRIDGE: Bad header crc; possible id = ' + obj.id);
       }
     }
@@ -318,7 +318,7 @@ class Pro4
         chksum ^= data[i];
       }
       if (obj.crcType.crc8.headerCrc !== chksum) {
-        obj.status = STATUS_ERROR;
+        obj.status = this.constants.STATUS_ERROR;
         logger.warn('BRIDGE: Bad header crc; possible id = ' + obj.id);
       }   
     }
@@ -332,7 +332,7 @@ class Pro4
     let chksum = 0;
     let padding = 1;
     
-    obj.status = STATUS_SUCCESS;
+    obj.status = this.constants.STATUS_SUCCESS;
 
     if (obj.sync === self.constants.SYNC_RESPONSE32BE) {
       padding = 4;
@@ -344,7 +344,7 @@ class Pro4
     // validate total CRC
     if (obj.sync == this.constants.SYNC_RESPONSE32BE) {
       if (obj.crcType.crc32.headerCrc !== CRC.crc32(data.slice(headerLen,data.length-padding))) {
-        obj.status = STATUS_ERROR;
+        obj.status = this.constants.STATUS_ERROR;
         logger.warn('BRIDGE: Bad total crc; possible id = ' + obj.id);
       }
     }
@@ -355,12 +355,12 @@ class Pro4
         chksum ^= data[i];
       }
       if (obj.crcType.crc8.headerCrc !== chksum) {
-        obj.status = STATUS_ERROR;
+        obj.status = this.constants.STATUS_ERROR;
         logger.warn('BRIDGE: Bad total crc; possible id = ' + obj.id);
       }
     }
 
-    if (obj.status == STATUS_SUCCESS) {
+    if (obj.status == this.constants.STATUS_SUCCESS) {
       // extract payload and send to parser
       // add to retVal object property
       let begin = 0;
