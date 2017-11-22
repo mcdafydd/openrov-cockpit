@@ -351,7 +351,7 @@ class Bridge extends EventEmitter
       // use client-specific topic and pass handling to appropriate parser
       let clientId = topic.split('/', 2)[1];
       // only send messages from elphel gateways to parser
-      if (clientId.match('elphel-.*')) {
+      if (clientId.match('elphelBOGUS-.*')) {
 
         // reset to init if last state was stop, otherwise read last known state
         if (this.fsm[clientId].current == '_s_stop')
