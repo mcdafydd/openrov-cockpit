@@ -200,8 +200,8 @@ class Bridge extends EventEmitter
       motors:           [
         {
           name:         "thruster",
-          nodeId:       31,     // PRO4 packet ID
-          motorId:      0,      // device protocol ID, position in PRO4 payload
+          nodeId:       15,     // PRO4 packet ID
+          motorId:      1,      // device protocol ID, position in PRO4 payload
           value:        0,      // thrust value (-1 to +1)
           reverse:      false,  // boolean
           fwdMod:       1.0,    // final forward thrust modifier
@@ -209,7 +209,7 @@ class Bridge extends EventEmitter
         },
         {
           name:         "aft starboard",
-          nodeId:       32,     // PRO4 packet IDar
+          nodeId:       13,     // PRO4 packet IDar
           motorId:      1,      // device protocol ID, position in PRO4 payload
           value:        0,      // thrust value (-1 to +1)
           reverse:      false,  // boolean
@@ -218,8 +218,8 @@ class Bridge extends EventEmitter
         },
         {
           name:         "aft vertical",
-          nodeId:       33,     // PRO4 packet ID
-          motorId:      2,      // device protocol ID, position in PRO4 payload
+          nodeId:       17,     // PRO4 packet ID
+          motorId:      0,      // device protocol ID, position in PRO4 payload
           value:        0,      // thrust value (-1 to +1)
           reverse:      false,  // boolean
           fwdMod:       1.0,    // final forward thrust modifier
@@ -227,8 +227,8 @@ class Bridge extends EventEmitter
         },
         {
           name:         "starboard",
-          nodeId:       34,     // PRO4 packet ID
-          motorId:      3,      // device protocol ID, position in PRO4 payload
+          nodeId:       14,     // PRO4 packet ID
+          motorId:      1,      // device protocol ID, position in PRO4 payload
           value:        0,      // thrust value (-1 to +1)
           reverse:      false,  // boolean
           fwdMod:       1.0,    // final forward thrust modifier
@@ -236,8 +236,8 @@ class Bridge extends EventEmitter
         },
         {
           name:         "vertical",
-          nodeId:       35,     // PRO4 packet ID
-          motorId:      4,      // device protocol ID, position in PRO4 payload
+          nodeId:       12,     // PRO4 packet ID
+          motorId:      1,      // device protocol ID, position in PRO4 payload
           value:        0,      // thrust value (-1 to +1)
           reverse:      false,  // boolean
           fwdMod:       1.0,    // final forward thrust modifier
@@ -246,7 +246,7 @@ class Bridge extends EventEmitter
       ],
       pro4:             {
         pro4Sync:       pro4.constants.SYNC_REQUEST32LE,
-        pro4Addresses:  [129],  // 0x81, multicast, see motors array above
+        pro4Addresses:  [12, 13, 14, 15, 17],  // 129, multicast, see motors array above
         flags:          2,      // defined by VideoRay
         csrAddress:     0xf0,   // custom command address
         len:            2+4*5,   // 2 command bytes + 4 byte float * number of motors
@@ -620,7 +620,7 @@ class Bridge extends EventEmitter
       // connection state is also set to false in class close() method
       this.mqttConnected = false;
       logger.debug('BRIDGE: MQTT broker connection closed!');
-    });
+    }); 
 
     this.globalBus.on('plugin.mqttBroker.clientConnected', (clientId) => {
       logger.debug('BRIDGE: Received MQTT clientConnected() from ' + clientId);
