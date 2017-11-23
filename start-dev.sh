@@ -11,10 +11,10 @@ curl $SET_PARAMS_URL
 
 # Restart all instances of mqttclient.paho (inittab will respawn)
 curl -v --connect-timeout 5 'http://192.168.2.211/phpshell.php?command=killall%20mqttclient.paho'
-curl -v --connect-timeout 5 'http://192.168.2.212/phpshell.php?command=killall%20mqttclient.paho'
 curl -v --connect-timeout 5 'http://192.168.2.213/phpshell.php?command=killall%20mqttclient.paho'
 curl -v --connect-timeout 5 'http://192.168.2.215/phpshell.php?command=killall%20mqttclient.paho'
 curl -v --connect-timeout 5 'http://192.168.2.217/phpshell.php?command=killall%20mqttclient.paho'
+curl -v --connect-timeout 5 'http://192.168.2.218/phpshell.php?command=killall%20mqttclient.paho'
 
 sleep 1
 # Kill any mjpg_streamers hanging around before renice
