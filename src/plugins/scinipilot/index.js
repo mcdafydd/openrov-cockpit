@@ -106,6 +106,8 @@
         break;
       }
     }
+    // XXX - try and avoid sending conflicting motor state values from both rovpilot and scinipilot plugins
+    /*
     if (this.sendUpdateEnabled && updateRequired || this.sendToROVEnabled === false) {
       if (this.sendToROVEnabled) {
         for (var control in controls) {
@@ -115,12 +117,11 @@
           }
         }
       }
-      // XXX
-      //this.priorControls = controls;
-      //report back the actual commands after power restrictions
-      //var motorCommands = this.physics.mapMotors(controls.throttle, controls.yaw, controls.lift);
-      //this.cockpit.emit('plugin.scinipilot.controls', motorCommands);
-    }
+      this.priorControls = controls;
+      // report back the actual commands after power restrictions
+      var motorCommands = this.physics.mapMotors(controls.throttle, controls.yaw, controls.lift);
+      this.cockpit.emit('plugin.scinipilot.controls', motorCommands);
+    } */
   };
   SCINIPilot.prototype.getSettingSchema = function getSettingSchema() {
     return [

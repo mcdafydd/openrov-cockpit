@@ -10,7 +10,7 @@ thrusters5x1.prototype.start = function start() {
   var self = this;
 
   //While we work on the best pattern this is a work around to make sure the MCU
-  //gets the motor settings.  Every 30 seconds they get recent, or immediatly after
+  //gets the motor settings.  Every 30 seconds they get resent, or immediatly after
   //settings have changed.  This decouples the timing issues around the MCU not coming
   //up at the same time the Node module.
   this.settingtimer = setInterval(function(){self.SendMotorSettings()},30000)
