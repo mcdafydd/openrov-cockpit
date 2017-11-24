@@ -200,8 +200,8 @@ class Bridge extends EventEmitter
       motors:           [
         {
           name:         "thruster",
-          nodeId:       15,     // PRO4 packet ID
-          motorId:      1,      // device protocol ID, position in PRO4 payload
+          nodeId:       17,     // PRO4 packet ID
+          motorId:      4,      // device protocol ID, position in PRO4 payload
           value:        0,      // thrust value (-1 to +1)
           reverse:      false,  // boolean
           fwdMod:       1.0,    // final forward thrust modifier
@@ -218,7 +218,7 @@ class Bridge extends EventEmitter
         },
         {
           name:         "aft vertical",
-          nodeId:       17,     // PRO4 packet ID
+          nodeId:       12,     // PRO4 packet ID
           motorId:      0,      // device protocol ID, position in PRO4 payload
           value:        0,      // thrust value (-1 to +1)
           reverse:      false,  // boolean
@@ -227,8 +227,8 @@ class Bridge extends EventEmitter
         },
         {
           name:         "starboard",
-          nodeId:       14,     // PRO4 packet ID
-          motorId:      1,      // device protocol ID, position in PRO4 payload
+          nodeId:       15,     // PRO4 packet ID
+          motorId:      3,      // device protocol ID, position in PRO4 payload
           value:        0,      // thrust value (-1 to +1)
           reverse:      false,  // boolean
           fwdMod:       1.0,    // final forward thrust modifier
@@ -236,8 +236,8 @@ class Bridge extends EventEmitter
         },
         {
           name:         "vertical",
-          nodeId:       12,     // PRO4 packet ID
-          motorId:      1,      // device protocol ID, position in PRO4 payload
+          nodeId:       14,     // PRO4 packet ID
+          motorId:      2,      // device protocol ID, position in PRO4 payload
           value:        0,      // thrust value (-1 to +1)
           reverse:      false,  // boolean
           fwdMod:       1.0,    // final forward thrust modifier
@@ -246,7 +246,8 @@ class Bridge extends EventEmitter
       ],
       pro4:             {
         pro4Sync:       pro4.constants.SYNC_REQUEST32LE,
-        pro4Addresses:  [12, 13, 14, 15, 17],  // 129, multicast, see motors array above
+        pro4Addresses:  [129],  // 129, multicast, see motors array above
+        //pro4Addresses:  [12, 13, 14, 15, 17],  // 129, multicast, see motors array above
         flags:          2,      // defined by VideoRay
         csrAddress:     0xf0,   // custom command address
         len:            2+4*5,   // 2 command bytes + 4 byte float * number of motors
