@@ -128,7 +128,7 @@
         },
         'rovPilot.moveLift':
         {
-          description: "Command depth with gamepad thumbsticks",
+          description: "Command depth with gamepad trigger and bumper",
           controls:
           {
             axis: 
@@ -332,6 +332,12 @@
           },
           "RB": { type: "button",
                               action: 'rovPilot.incrementPowerLevel'
+          },
+          "LEFT_TRIGGER": { type: "button",
+                            action: 'rovPilot.moveDown'
+          },
+          "LB": { type: "button",
+                  action: 'rovPilot.moveUp'
           }
         }
       };

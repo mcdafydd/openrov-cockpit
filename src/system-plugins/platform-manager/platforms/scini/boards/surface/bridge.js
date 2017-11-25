@@ -559,6 +559,14 @@ class Bridge extends EventEmitter
 
             case '_s_process_payload':
             {
+              // remove current message from queue to continue servicing
+              if (typeof(clientId) != 'undefined') 
+              {
+                if (clientId.match('elphel.*')) 
+                {
+                  this.jobs[clientId].pop();
+                }
+              }
               // send response data to telemetry plugin
               // all that is required is to send a text string of "key:value" 
               // to emitStatus(status)
@@ -629,7 +637,7 @@ class Bridge extends EventEmitter
       if (clientId.match('elphel.*')) {
         // create new state machine, parse buffer, and job queue
         // concurrency = 1 (one message in flight at a time)
-        // max wait time for response = 15ms
+        // max wait time for response = 20ms
         // autostart = always running if jobs are in queue
         // results = store 
         this.clients[clientId] = {};
@@ -640,7 +648,7 @@ class Bridge extends EventEmitter
         this.results[clientId] = [];
         this.jobs[clientId] = new q({ 
                                       concurrency: 1, 
-                                      timeout: 15, 
+                                      timeout: 20, 
                                       autostart: true, 
                                       results: this.results[clientId]
                                     });
@@ -664,12 +672,6 @@ class Bridge extends EventEmitter
     });
     this.globalBus.on('plugin.mqttBroker.publishedByClientId', (client) => {
       logger.debug('BRIDGE: MQTT message published by client ' + client);
-      // remove current message from queue to continue servicing
-      if (typeof(client) != 'undefined') {
-        if (client.id.match('elphel.*')) {
-          this.jobs[client.id].pop();
-        }
-      }
     });
   }
 
@@ -1262,7 +1264,7 @@ class Bridge extends EventEmitter
   addToQueue ( packetBuf )
   {
     let self = this;
-    // keep it simple - add packet buf to each gateway queue
+    // keep it simple - add packetBuf to each client queue (queues only get created on elphels)
     for ( let clientId in self.jobs ) {
       self.jobs[clientId].push(function () { return self.sendToMqtt(clientId, packetBuf); });  
     }
@@ -1281,7 +1283,7 @@ class Bridge extends EventEmitter
     } 
     else
     {
-      logger.debug('BRIDGE: DID NOT SEND TO ROV - Not connected');
+      logger.debug('BRIDGE: DID NOT SEND TO ROV - client ' + clientId + ' not connected');
     }
   }
 
