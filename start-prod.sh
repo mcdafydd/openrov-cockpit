@@ -1,3 +1,6 @@
+# Kill any stuck old cockpit processes
+kill -9 `ps auxww|grep cockpit.js | grep -v grep | awk '{print $2}'`
+
 # Set the primary forward camera IP here
 EXTERNAL_CAM_IP=$1
 
