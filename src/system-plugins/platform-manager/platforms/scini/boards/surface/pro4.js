@@ -90,7 +90,8 @@ const constants = {
   ADDR_REBOOT: 0xFE,
   REBOOT_CODE: 0xADDE,  // LSB First
   STATUS_SUCCESS: 1,    // PRO4 parser success - used by bridge state machine
-  STATUS_ERROR: 2       // PRO4 parser error - used by bridge state machine
+  STATUS_ERROR: 2,      // PRO4 parser error - used by bridge state machine
+  MAX_MESSAGE_SIZE: 256 // Used by PRO4 parser
 }; 
 
 class Pro4

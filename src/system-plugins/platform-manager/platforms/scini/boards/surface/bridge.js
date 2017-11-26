@@ -131,6 +131,20 @@ class Bridge extends EventEmitter
       }
     }
 
+    this.clumpLights = {
+      time:             0,
+      timeDelta_ms:     0,
+      updateInterval:   700,        // loop interval in ms
+      power:            0,          // 0 to 1
+      pro4:             {
+        pro4Sync:       pro4.constants.SYNC_REQUEST32LE,
+        pro4Addresses:  [64], // all updated at same time
+        flags:          2,          // defined by VideoRay
+        csrAddress:     0,          // custom command address
+        len:            4 * 3       // 3 led banks
+      }
+    }
+
     this.vehicleLights = {
       time:             0,
       timeDelta_ms:     0,
@@ -138,7 +152,7 @@ class Bridge extends EventEmitter
       power:            0,          // 0 to 1
       pro4:             {
         pro4Sync:       pro4.constants.SYNC_REQUEST32LE,
-        pro4Addresses:  [61, 62, 63, 64], // all updated at same time
+        pro4Addresses:  [61, 62, 63], // all updated at same time
         flags:          2,          // defined by VideoRay
         csrAddress:     0,          // custom command address
         len:            4 * 3       // 3 led banks
@@ -208,7 +222,7 @@ class Bridge extends EventEmitter
           revMod:       1.0     // final reverse thrust modifier
         },
         {
-          name:         "aft starboard",
+          name:         "aft horizontal",
           nodeId:       13,     // PRO4 packet IDar
           motorId:      1,      // device protocol ID, position in PRO4 payload
           value:        0,      // thrust value (-1 to +1)
@@ -226,7 +240,7 @@ class Bridge extends EventEmitter
           revMod:       1.0     // final reverse thrust modifier
         },
         {
-          name:         "starboard",
+          name:         "fore horizontal",
           nodeId:       15,     // PRO4 packet ID
           motorId:      3,      // device protocol ID, position in PRO4 payload
           value:        0,      // thrust value (-1 to +1)
@@ -235,7 +249,7 @@ class Bridge extends EventEmitter
           revMod:       1.0     // final reverse thrust modifier
         },
         {
-          name:         "vertical",
+          name:         "fore vertical",
           nodeId:       14,     // PRO4 packet ID
           motorId:      2,      // device protocol ID, position in PRO4 payload
           value:        0,      // thrust value (-1 to +1)
@@ -362,11 +376,10 @@ class Bridge extends EventEmitter
         
         // append message to the parseBuffer at "current", watch for overflow
         if (message.length + this.clients[clientId].bufIdx 
-            <  this.clients[clientId].parseBuffer.length)
+            <  this.clients[clientId].parseBuffer.length - pro4.constants.MAX_MESSAGE_SIZE)
         {
           message.copy(this.clients[clientId].parseBuffer, 
                       this.clients[clientId].bufIdx);
-          this.clients[clientId].bufIdx += message.length;
         }
         else
         {
@@ -376,9 +389,10 @@ class Bridge extends EventEmitter
           this.clients[clientId].parseIdx = 0;
           message.copy(this.clients[clientId].parseBuffer, 0);
         }
+        this.clients[clientId].bufIdx += message.length;
 
         // we may loop fast while waiting for arrival of data in partial packets
-        // so 100 is just a guess to make sure we exit the loop at some point
+        // so 100 is just a safety to make sure we exit the loop at some point
         // parser and buffer are only designed to handle partial packet receipt
         // and assume only one message in flight at a time
         while (this.fsm[clientId].current != '_s_stop' && loop_count < 100)
@@ -387,23 +401,26 @@ class Bridge extends EventEmitter
           {
             case '_s_init':
             {
-              let idx32 = this.clients[clientId].parseBuffer.indexOf(this.pro4sync32le);
-              let idx8b = this.clients[clientId].parseBuffer.indexOf(this.pro4sync8be);
-              let idx8l = this.clients[clientId].parseBuffer.indexOf(this.pro4sync8le);
+              let parseIdx = this.clients[clientId].parseIdx;
+              let bufIdx = this.clients[clientId].bufIdx;
+              let idx32 = this.clients[clientId].parseBuffer.slice(parseIdx, bufIdx)
+                          .indexOf(this.pro4sync32le);
+              let idx8b = this.clients[clientId].parseBuffer.slice(parseIdx, bufIdx)
+                          .indexOf(this.pro4sync8be);
+              let idx8l = this.clients[clientId].parseBuffer.slice(parseIdx, bufIdx)
+                          .indexOf(this.pro4sync8le);
               // assumes that sending more than required data is OK and is ignored by parser
-              if (idx32 >= 0 && this.clients[clientId].bufIdx 
-                  - this.clients[clientId].parseIdx + idx32 >= 10)
+              if (idx32 >= 0 && bufIdx - parseIdx + idx32 >= 10)
               {
                 this.clients[clientId].parseIdx += idx32;
                 this.clients[clientId].parsedHeader = this.parser.decodeHead(this.clients[clientId].parseBuffer.slice
                   (this.clients[clientId].parseIdx, this.clients[clientId].bufIdx));
                 this.fsm[clientId].ValidateHeader();
               }
-              else if (idx32 >= 0 && this.clients[clientId].bufIdx 
-                        - this.clients[clientId].parseIdx + idx32 < 10)
+              else if (idx32 >= 0 && bufIdx - parseIdx + idx32 < 10)
               {
                 // likely valid data, just not enough of it yet
-                // drop any leading non-packet bytes
+                // drop any leading non-interesting bytes
                 if (idx32 > 0)
                 {
                   this.clients[clientId].parseBuffer = 
@@ -413,16 +430,14 @@ class Bridge extends EventEmitter
                 this.clients[clientId].bufIdx -= idx32;
                 this.fsm[clientId].GetMoreHeaderData();
               }
-              else if (idx8b >= 0 && this.clients[clientId].bufIdx
-                        - this.clients[clientId].parseIdx + idx8b >= 7)
+              else if (idx8b >= 0 && bufIdx - parseIdx + idx8b >= 7)
               {
                 this.clients[clientId].parseIdx += idx8b;
                 this.clients[clientId].parsedHeader = this.parser.decodeHead(this.clients[clientId].parseBuffer.slice
                   (this.clients[clientId].parseIdx, this.clients[clientId].bufIdx));
                 this.fsm[clientId].ValidateHeader();
               }
-              else if (idx8b >= 0 && this.clients[clientId].bufIdx
-                - this.clients[clientId].parseIdx + idx8b < 7)
+              else if (idx8b >= 0 && bufIdx - parseIdx + idx8b < 7)
               {
                 // likely valid data, just not enough of it yet
                 // drop any leading non-packet bytes
@@ -643,7 +658,7 @@ class Bridge extends EventEmitter
         this.clients[clientId] = {};
         this.clients[clientId].bufIdx = 0; // points to end of received data in parseBuffer
         this.clients[clientId].parseIdx = 0; // points to current parser index
-        this.clients[clientId].parseBuffer = new Buffer.alloc(256);
+        this.clients[clientId].parseBuffer = new Buffer.alloc(1024);
         this.fsm[clientId] = self.createStateMachine();
         this.results[clientId] = [];
         this.jobs[clientId] = new q({ 
@@ -803,10 +818,10 @@ class Bridge extends EventEmitter
 
       case 'lights_tpow': 
       { 
-        // Scale and limit thrust between 0 and 1 (maximums are 0, 1)   
+        // Scale and limit power between 0 and 1 (maximums are 0, 1)   
         let power = parameters[0] / 1000;  
         power = Math.max(power, 0);
-        power = Math.min(power, 0.7);
+        power = Math.min(power, 1.0);
 
         // Update state object to be sent on next packet interval
         self.vehicleLights.power = power;
@@ -825,17 +840,27 @@ class Bridge extends EventEmitter
 
       case 'elights_tpow': 
       {
+        // Scale and limit power between 0 and 1 (maximums are 0, 1)   
+        let power = parameters[0] / 1000;          
+        power = Math.max(power, 0);
+        power = Math.min(power, 1.0);
+
         // Ack command
-        let power = parseInt( parameters[0] );
         this.emitStatus('elights_tpow:' + power );
 
+        // Update state object to be sent on next packet interval
+        self.clumpLights.power = power;
+        
+        // DEBUG: dump values sent by OpenROV after scale/limit
+        logger.debug('External lights value: ' + power);
+        
+        // Ack command
         setTimeout( function()
         {
-          // Move to target position
           self.emitStatus('elights_pow:' + power );
         }, 250 );
-
-        break;
+        
+        break;        
       }
 
       case 'camServ_tpos': 
@@ -1113,17 +1138,23 @@ class Bridge extends EventEmitter
       case 'yaw':
       {
         let yaw = parameters[0]; // must be converted to 32-bit IEEE 754 float in payload
- 
+        let yaw2 = parameters[0]; // supports thruster modifiers
+
         // OpenROV sends values 0-100 based on system power level
         yaw *= 0.01;
+        yaw2 *= 0.01;
         if (yaw > 0) {
           yaw *= self.motorControl.motors[1].fwdMod;
+          yaw2 *= self.motorControl.motors[3].fwdMod;
         }
         if (yaw < 0) {
           yaw *= self.motorControl.motors[1].revMod;
+          yaw2 *= self.motorControl.motors[3].revMod;
         }
         yaw = Math.max(yaw,-1.0);
-        yaw = Math.min(yaw, 1.0); 
+        yaw = Math.min(yaw, 1.0);
+        yaw2 = Math.max(yaw2,-1.0);
+        yaw2 = Math.min(yaw2, 1.0); 
 
         // Update state variable(s)
         if (self.motorControl.motors[1].reverse == true) {
@@ -1131,6 +1162,12 @@ class Bridge extends EventEmitter
         }
         else {
           self.motorControl.motors[1].value = yaw;         
+        }
+        if (self.motorControl.motors[3].reverse == true) {
+          self.motorControl.motors[3].value = yaw2;          
+        }
+        else {
+          self.motorControl.motors[3].value = yaw2 * -1;         
         }
         
         logger.debug('Sending yaw update: ' + yaw);
@@ -1183,17 +1220,23 @@ class Bridge extends EventEmitter
       case 'pitch':
       {
         let pitch = parameters[0]; // must be converted to 32-bit IEEE 754 float in payload
+        let pitch2 = parameters[0]; // supports thruster modifiers
 
         // OpenROV sends values 0-100 based on system power level    
         pitch *= 0.01;
+        pitch2 *= 0.01;
         if (pitch > 0) {
           pitch *= self.motorControl.motors[4].fwdMod;
+          pitch2 *= self.motorControl.motors[2].fwdMod;
         }
         if (pitch < 0) {
           pitch *= self.motorControl.motors[4].revMod;
+          pitch2 *= self.motorControl.motors[2].revMod;
         }
         pitch = Math.max(pitch,-1.0);
         pitch = Math.min(pitch, 1.0);
+        pitch2 = Math.max(pitch,-1.0);
+        pitch2 = Math.min(pitch, 1.0);
 
         // Update state variable(s)
         if (self.motorControl.motors[4].reverse == true) {
@@ -1201,6 +1244,12 @@ class Bridge extends EventEmitter
         }
         else {
           self.motorControl.motors[4].value = pitch;         
+        }
+        if (self.motorControl.motors[2].reverse == true) {
+          self.motorControl.motors[2].value = pitch;          
+        }
+        else {
+          self.motorControl.motors[2].value = pitch * -1;         
         }
 
         logger.debug('Sending pitch update: ' + pitch);
@@ -1316,6 +1365,7 @@ class Bridge extends EventEmitter
     {
       txtStatus={};
     }
+    // emit to telemetry plugin
     this.globalBus.emit('mcu.status', txtStatus);
 
     if (this.emitRawSerial) 
@@ -1372,15 +1422,11 @@ class Bridge extends EventEmitter
 
     // Update time
     this.vehicleLights.time += this.vehicleLights.timeDelta_ms;
-/* Pro4 payload values */
-        /* REF: https://github.com/videoray/Thruster/blob/master/custom_command.h */
-        let payloadCmd = 0xaa; // Sent as first byte of payload
-        let motorId = 1; // Second byte of payload, Thruster ID that will reply 
-    // Sample script output and payload data
-    //[0.1, 0.2, 0.3]
+    this.clumpLights.time += this.clumpLights.timeDelta_ms;
+    // Sample light payload - light values [0.1, 0.2, 0.3]
+    // Request:
     //f5:5f:3d:02:00:0c:2a:c9:ad:46:cd:cc:cc:3d:cd:cc:4c:3e:9a:99:99:3e:22:ad:d8:6e
-    //Got response: 28 bytes
-    //Turnaround time: 65.192223 mS
+    // Response:
     //f0:0f:3d:02:f0:0e:c3:17:c1:d4:83:00:5a:07:42:66:e6:83:be:00:00:06:42:00:1a:c4:ab:7e
 
     // convert OpenROV light target power to 3 identical 32-bit LE floats and build payload
@@ -1389,8 +1435,14 @@ class Bridge extends EventEmitter
     payload.writeFloatLE(this.vehicleLights.power, 4);
     payload.writeFloatLE(this.vehicleLights.power, 8);
 
+    let clumpPayload = new Buffer.allocUnsafe(this.clumpLights.pro4.len);
+    clumpPayload.writeFloatLE(this.clumpLights.power, 0);
+    clumpPayload.writeFloatLE(this.clumpLights.power, 4);
+    clumpPayload.writeFloatLE(this.clumpLights.power, 8);
+
     // shorter name for easier reading
     let p = this.vehicleLights.pro4;
+    let p2 = this.clumpLights.pro4;
 
     // Generate new pro4 packet for each address and send to all light modules
     for (let i = 0; i < p.pro4Addresses.length; i++) {
@@ -1398,6 +1450,18 @@ class Bridge extends EventEmitter
         let j = i;  // loop closure
         // Packet len = Header + 4-byte CRC + payload + 4-byte CRC = 27
         let packetBuf = self.parser.encode(p.pro4Sync, p.pro4Addresses[j], p.flags, p.csrAddress, p.len, payload);
+        // maintain light state by updating at least once per second
+        // self.sendToMqtt(packetBuf);
+        self.addToQueue(packetBuf);
+      })();
+    }
+
+    // Generate new pro4 packet for each address and send to all light modules
+    for (let i = 0; i < p2.pro4Addresses.length; i++) {
+      (function() {
+        let j = i;  // loop closure
+        // Packet len = Header + 4-byte CRC + payload + 4-byte CRC = 27
+        let packetBuf = self.parser.encode(p2.pro4Sync, p2.pro4Addresses[j], p2.flags, p2.csrAddress, p2.len, clumpPayload);
         // maintain light state by updating at least once per second
         // self.sendToMqtt(packetBuf);
         self.addToQueue(packetBuf);
@@ -1416,14 +1480,11 @@ class Bridge extends EventEmitter
     
     // Update time
     this.motorControl.time += this.motorControl.timeDelta_ms;
-
-    // This is lights - replace with sample motor data
-    // Sample script output and payload data
-    //[0.1, 0.2, 0.3]
-    //f5:5f:3d:02:00:0c:2a:c9:ad:46:cd:cc:cc:3d:cd:cc:4c:3e:9a:99:99:3e:22:ad:d8:6e
-    //Got response: 28 bytes
-    //Turnaround time: 65.192223 mS
-    //f0:0f:3d:02:f0:0e:c3:17:c1:d4:83:00:5a:07:42:66:e6:83:be:00:00:06:42:00:1a:c4:ab:7e
+    // Sample motor payload
+    // Request:
+    //
+    // Response:
+    //
 
     // convert OpenROV target thrust to 32-bit LE floats and build payload
     let payload = new Buffer.allocUnsafe(this.motorControl.pro4.len);

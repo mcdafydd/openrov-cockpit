@@ -10,6 +10,8 @@ SET_PARAMS_URL='http://'$EXTERNAL_CAM_IP'/parsedit.php?immediate&AUTOEXP_ON=0&QU
 curl -v --connect-timeout 5 $SET_PARAMS_URL
 
 # Restart all instances of mqttclient.paho (inittab will respawn)
+KILL_URL='http://'$EXTERNAL_CAM_IP'/phpshell.php?command=killall%20mqttclient.paho'
+curl -v --connect-timeout 5 $KILL_URL
 curl -v --connect-timeout 5 'http://192.168.2.211/phpshell.php?command=killall%20mqttclient.paho'
 curl -v --connect-timeout 5 'http://192.168.2.213/phpshell.php?command=killall%20mqttclient.paho'
 curl -v --connect-timeout 5 'http://192.168.2.215/phpshell.php?command=killall%20mqttclient.paho'
