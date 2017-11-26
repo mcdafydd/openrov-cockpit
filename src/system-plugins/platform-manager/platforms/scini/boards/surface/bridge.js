@@ -362,7 +362,7 @@ class Bridge extends EventEmitter
       let loop_count = 0;
       // message is a Buffer object, send to decoder
       logger.debug('BRIDGE: Received MQTT on topic ' + topic);
-      logger.debug('BRIDGE: Raw MQTT message = ' + message.toString('hex'));
+      logger.warn('BRIDGE: Raw MQTT message = ' + message.toString('hex'));
       // use client-specific topic and pass handling to appropriate parser
       let clientId = topic.split('/', 2)[1];
       // only send messages from elphel gateways to parser
