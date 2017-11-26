@@ -1,6 +1,10 @@
 # Kill any stuck old cockpit processes
 kill -9 `ps auxww|grep cockpit.js | grep -v grep | awk '{print $2}'`
 
+# Startup clump camera recording
+#mkdir -p /home/scini/Desktop/images/`date +%d%h%H%m`
+#mjpg_streamer -i "input_http.so -H 192.168.2.218 -p 8081 -u /bmimg" -o "output_http.so -p 9999 -w /home/scini/Desktop/openrov/www" -o "output_file.so -f /home/scini/Desktop/images/`date +%d%h%H%m`"
+
 # Set the primary forward camera IP here
 EXTERNAL_CAM_IP=$1
 
