@@ -213,9 +213,9 @@ class Bridge extends EventEmitter
       responderIdx:     0,      // motor array index that will respond to requests
       motors:           [
         {
-          name:         "thruster",
-          nodeId:       17,     // PRO4 packet ID
-          motorId:      4,      // device protocol ID, position in PRO4 payload
+          name:         "aft vertical",
+          nodeId:       12,     // PRO4 packet ID
+          motorId:      0,      // device protocol ID, position in PRO4 payload
           value:        0,      // thrust value (-1 to +1)
           reverse:      false,  // boolean
           fwdMod:       1.0,    // final forward thrust modifier
@@ -231,9 +231,9 @@ class Bridge extends EventEmitter
           revMod:       1.0     // final reverse thrust modifier          
         },
         {
-          name:         "aft vertical",
-          nodeId:       12,     // PRO4 packet ID
-          motorId:      0,      // device protocol ID, position in PRO4 payload
+          name:         "fore vertical",
+          nodeId:       14,     // PRO4 packet ID
+          motorId:      2,      // device protocol ID, position in PRO4 payload
           value:        0,      // thrust value (-1 to +1)
           reverse:      false,  // boolean
           fwdMod:       1.0,    // final forward thrust modifier
@@ -249,9 +249,9 @@ class Bridge extends EventEmitter
           revMod:       1.0     // final reverse thrust modifier
         },
         {
-          name:         "fore vertical",
-          nodeId:       14,     // PRO4 packet ID
-          motorId:      2,      // device protocol ID, position in PRO4 payload
+          name:         "thruster",
+          nodeId:       17,     // PRO4 packet ID
+          motorId:      4,      // device protocol ID, position in PRO4 payload
           value:        0,      // thrust value (-1 to +1)
           reverse:      false,  // boolean
           fwdMod:       1.0,    // final forward thrust modifier
@@ -1112,20 +1112,20 @@ class Bridge extends EventEmitter
         // OpenROV sends values 0-100 based on system power level    
         thrust *= 0.01;
         if (thrust > 0) {
-          thrust *= self.motorControl.motors[0].fwdMod;
+          thrust *= self.motorControl.motors[4].fwdMod;
         }
         if (thrust < 0) {
-          thrust *= self.motorControl.motors[0].revMod;
+          thrust *= self.motorControl.motors[4].revMod;
         }
         thrust = Math.max(thrust,-1.0);
         thrust = Math.min(thrust, 1.0);
 
         // Update state variable(s)
-        if (self.motorControl.motors[0].reverse == true) {
-          self.motorControl.motors[0].value = thrust * -1;          
+        if (self.motorControl.motors[4].reverse == true) {
+          self.motorControl.motors[4].value = thrust * -1;          
         }
         else {
-          self.motorControl.motors[0].value = thrust;          
+          self.motorControl.motors[4].value = thrust;          
         }
 
         // DEBUG: dump values sent by OpenROV
@@ -1185,12 +1185,12 @@ class Bridge extends EventEmitter
         lift *= 0.01;
         lift2 *= 0.01;
         if (lift > 0) {
-          lift *= self.motorControl.motors[2].fwdMod;
-          lift2 *= self.motorControl.motors[4].fwdMod;          
+          lift *= self.motorControl.motors[0].fwdMod;
+          lift2 *= self.motorControl.motors[2].fwdMod;          
         }
         if (lift < 0) {
-          lift *= self.motorControl.motors[2].revMod;
-          lift2 *= self.motorControl.motors[4].revMod; 
+          lift *= self.motorControl.motors[0].revMod;
+          lift2 *= self.motorControl.motors[2].revMod; 
         }
         lift = Math.max(lift,-1.0);
         lift = Math.min(lift, 1.0);
@@ -1198,17 +1198,17 @@ class Bridge extends EventEmitter
         lift2 = Math.min(lift2, 1.0);               
         
         // Update state variable(s)
+        if (self.motorControl.motors[0].reverse == true) {
+          self.motorControl.motors[0].value = lift * -1;          
+        }
+        else {
+          self.motorControl.motors[0].value = lift;         
+        }
         if (self.motorControl.motors[2].reverse == true) {
-          self.motorControl.motors[2].value = lift * -1;          
+          self.motorControl.motors[2].value = lift2 * -1;          
         }
         else {
-          self.motorControl.motors[2].value = lift;         
-        }
-        if (self.motorControl.motors[4].reverse == true) {
-          self.motorControl.motors[4].value = lift2 * -1;          
-        }
-        else {
-          self.motorControl.motors[4].value = lift2;         
+          self.motorControl.motors[2].value = lift2;         
         }
 
         logger.debug('Sending lift update: ' + lift);
@@ -1226,11 +1226,11 @@ class Bridge extends EventEmitter
         pitch *= 0.01;
         pitch2 *= 0.01;
         if (pitch > 0) {
-          pitch *= self.motorControl.motors[4].fwdMod;
+          pitch *= self.motorControl.motors[0].fwdMod;
           pitch2 *= self.motorControl.motors[2].fwdMod;
         }
         if (pitch < 0) {
-          pitch *= self.motorControl.motors[4].revMod;
+          pitch *= self.motorControl.motors[0].revMod;
           pitch2 *= self.motorControl.motors[2].revMod;
         }
         pitch = Math.max(pitch,-1.0);
@@ -1239,11 +1239,11 @@ class Bridge extends EventEmitter
         pitch2 = Math.min(pitch, 1.0);
 
         // Update state variable(s)
-        if (self.motorControl.motors[4].reverse == true) {
-          self.motorControl.motors[4].value = pitch * -1;          
+        if (self.motorControl.motors[0].reverse == true) {
+          self.motorControl.motors[0].value = pitch * -1;          
         }
         else {
-          self.motorControl.motors[4].value = pitch;         
+          self.motorControl.motors[0].value = pitch;         
         }
         if (self.motorControl.motors[2].reverse == true) {
           self.motorControl.motors[2].value = pitch;          
