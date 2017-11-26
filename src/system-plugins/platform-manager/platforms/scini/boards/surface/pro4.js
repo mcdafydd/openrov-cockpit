@@ -283,7 +283,7 @@ class Pro4
       logger.debug('DEBUG: My crc8 total = ' + chksum.toString(16));
     }
 
-    logger.debug('BRIDGE: Debug PRO4 request = ' + buf.toString('hex'))
+    logger.warn('BRIDGE: Debug PRO4 request = ' + buf.toString('hex'));
     return buf;
   }
 
