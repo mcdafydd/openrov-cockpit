@@ -1,0 +1,3 @@
+[submodule "plugin/mqtt-broker"]
+	path = src/plugins/mqtt-broker
+	url = https://github.com/mcdafydd/mqtt-broker.git
