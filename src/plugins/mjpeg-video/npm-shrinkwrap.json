@@ -454,8 +454,8 @@
     },
     "mjpeg-video-server": {
       "version": "2.0.0",
-      "from": "git+https://github.com/OpenROV-Dev/mjpeg-video-server.git",
-      "resolved": "git+https://github.com/OpenROV-Dev/mjpeg-video-server.git#4bfe75dd1fd24b9307c78d16171a04dcc5b004cb"
+      "from": "git+https://github.com/mcdafydd/mjpeg-video-server.git#32d19cdc1a6ef06f22df856500a325d2c559ce32",
+      "resolved": "git+https://github.com/mcdafydd/mjpeg-video-server.git#32d19cdc1a6ef06f22df856500a325d2c559ce32"
     },
     "ms": {
       "version": "0.7.2",
