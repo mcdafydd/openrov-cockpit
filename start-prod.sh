@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Make sure nginx is running
+/etc/init.d/start nginx
+
 # Kill any stuck old cockpit processes
 kill -9 `ps auxww|grep cockpit.js | grep -v grep | awk '{print $2}'`
 
