@@ -17,10 +17,10 @@ pluginFinder.prototype.start = function start() {
     var searchCache={};
     deps.cockpit.on('plugin.pluginFinder.search', function(name, callback) {
         logger.debug('performing search for plugins.');
-        
+
         if (searchCache[name]!==undefined){
           callback(searchCache[name]);
-          return; 
+          return;
         }
 
         bower.commands.list({}, {
@@ -28,7 +28,7 @@ pluginFinder.prototype.start = function start() {
             })
             .on('end', function(listing) {
                 var list = listing.dependencies;
-                bower.commands.search('openrov-plugin-' + name, {})
+                /*bower.commands.search('openrov-plugin-' + name, {})
                     .on('end', function(results) {
                         for (var result in results) {
                             if (results[result].name in list) {
@@ -44,12 +44,12 @@ pluginFinder.prototype.start = function start() {
                     })
                     .on('error', function(error) {
                       logger.error(error);
-                    });
+                    }); 
 
             })
             .on('error', function(error) {
                 logger.error(error);
-            });
+            }); */
     });
     var infoCache={};
     deps.cockpit.on('plugin.pluginFinder.info', function(name, callback) {
