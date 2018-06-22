@@ -44,12 +44,11 @@ pluginFinder.prototype.start = function start() {
                     })
                     .on('error', function(error) {
                       logger.error(error);
-                    }); 
-
+                    }); */
             })
             .on('error', function(error) {
                 logger.error(error);
-            }); */
+            }); 
     });
     var infoCache={};
     deps.cockpit.on('plugin.pluginFinder.info', function(name, callback) {
