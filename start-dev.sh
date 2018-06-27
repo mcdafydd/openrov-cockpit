@@ -22,16 +22,16 @@ TEMP_URL='http://'$EXTERNAL_CAM_IP'/i2c.php?width=8&bus=1&adr=0x4800'
 # Attempt to set defaults on camera
 # Autoexposure off; JPEG 80% quality; Exposure 30ms
 SET_PARAMS_URL='http://'$EXTERNAL_CAM_IP'/parsedit.php?immediate&AUTOEXP_ON=0&QUALITY=80&EXPOS=30000'
-curl -v --connect-timeout 5 $SET_PARAMS_URL
+curl -v --connect-timeout 2 $SET_PARAMS_URL
 
 # Restart all instances of mqttclient.paho (inittab will respawn)
 KILL_URL='http://'$EXTERNAL_CAM_IP'/phpshell.php?command=killall%20mqttclient.paho'
-curl -v --connect-timeout 5 $KILL_URL
-curl -v --connect-timeout 5 'http://192.168.2.211/phpshell.php?command=killall%20mqttclient.paho'
-curl -v --connect-timeout 5 'http://192.168.2.213/phpshell.php?command=killall%20mqttclient.paho'
-curl -v --connect-timeout 5 'http://192.168.2.215/phpshell.php?command=killall%20mqttclient.paho'
-curl -v --connect-timeout 5 'http://192.168.2.217/phpshell.php?command=killall%20mqttclient.paho'
-curl -v --connect-timeout 5 'http://192.168.2.218/phpshell.php?command=killall%20mqttclient.paho'
+curl -v --connect-timeout 2 $KILL_URL
+curl -v --connect-timeout 2 'http://192.168.2.211/phpshell.php?command=killall%20mqttclient.paho'
+curl -v --connect-timeout 2 'http://192.168.2.213/phpshell.php?command=killall%20mqttclient.paho'
+curl -v --connect-timeout 2 'http://192.168.2.215/phpshell.php?command=killall%20mqttclient.paho'
+curl -v --connect-timeout 2 'http://192.168.2.217/phpshell.php?command=killall%20mqttclient.paho'
+curl -v --connect-timeout 2 'http://192.168.2.218/phpshell.php?command=killall%20mqttclient.paho'
 
 sleep 1
 # Kill any mjpg_streamers hanging around before renice

@@ -823,6 +823,9 @@ class Bridge extends EventEmitter
         power = Math.max(power, 0);
         power = Math.min(power, 1.0);
 
+	// Ack command
+	this.emitStatus('lights_tpow:' + parameters[0] );
+	 
         // Update state object to be sent on next packet interval
         self.vehicleLights.power = power;
         

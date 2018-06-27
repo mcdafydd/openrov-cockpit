@@ -452,9 +452,9 @@ mime@1.3.4:
   dependencies:
     brace-expansion "^1.0.0"
 
-"mjpeg-video-server@git+https://github.com/OpenROV-Dev/mjpeg-video-server.git":
+"mjpeg-video-server@git+https://github.com/mcdafydd/mjpeg-video-server#32d19cdc1a6ef06f22df856500a325d2c559ce32":
   version "2.0.0"
-  resolved "git+https://github.com/OpenROV-Dev/mjpeg-video-server.git#4bfe75dd1fd24b9307c78d16171a04dcc5b004cb"
+  resolved "git+https://github.com/mcdafydd/mjpeg-video-server#32d19cdc1a6ef06f22df856500a325d2c559ce32"
   dependencies:
     bluebird "^1.0.0"
     child-process-promise "^2.0.2"
