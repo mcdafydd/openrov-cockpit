@@ -15,6 +15,13 @@ mkdir -p /opt/openrov/images/`date +%d%h%H%M`
 # Set the primary forward camera IP here
 EXTERNAL_CAM_IP=$1
 
+SETENV=$2
+# Set default debug statements for development
+# May be overridden by docker-compose environment
+if [ -z "$DEBUGFLAGS" ]; then
+  DEBUGFLAGS="bridge, mcu, cpu, *:Notifications, app:mjpeg*"
+fi
+
 # Elphel internal temperature URL
 TEMP_URL='http://'$EXTERNAL_CAM_IP'/i2c.php?width=8&bus=1&adr=0x4800'
 
@@ -37,11 +44,14 @@ sleep 1
 killall -9 mjpg_streamer
 
 # Default is prod set in scini-cockpit/openrov/Dockerfile
-if ["$SETENV" = "dev"]
+if [ "$SETENV" = "dev" ]
 then
-    USE_MOCK=false EXTERNAL_CAM=true EXTERNAL_CAM_URL='http://'$EXTERNAL_CAM_IP':8081/bmimg' NODE_ENV='development' PLATFORM='scini' DEBUG=$DEBUGFLAGS BOARD='surface' HARDWARE_MOCK=false DEV_MODE=false cacheDirectory='/tmp/cache' DATADIR='/tmp' LOG_LEVEL='debug' IGNORE_CACHE=true configfile='/tmp/rovconfig.json' pluginsDownloadDiretory='/tmp/plugins' photoDirectory="/tmp" video_url='http://'$EXTERNAL_CAM_IP':8081/bmimg' env plugins__ui-manager__selectedUI='new-ui' node --inspect src/cockpit.js 2>&1 | tee -a /opt/openrov/logs/`date +%d%h%H%M`-`basename $0`.txt
+    USE_MOCK=false EXTERNAL_CAM=true EXTERNAL_CAM_URL='http://'$EXTERNAL_CAM_IP':8081/bmimg' NODE_ENV='development' PLATFORM='scini' DEBUG=$DEBUGFLAGS BOARD='surface' HARDWARE_MOCK=false DEV_MODE=false cacheDirectory='/tmp/cache' DATADIR='/tmp' LOG_LEVEL='debug' IGNORE_CACHE=true configfile='/tmp/rovconfig.json' pluginsDownloadDiretory='/tmp/plugins' photoDirectory="/tmp" video_url='http://'$EXTERNAL_CAM_IP':8081/bmimg' env plugins__ui-manager__selectedUI='new-ui' node --inspect src/cockpit.js 2>&1 | tee -a /opt/openrov/logs/`date +%d%h%H%M`-`basename $0`-$SETENV.txt
+elif [ "$SETENV" = "orovmock" ]
+then
+    USE_MOCK=true MOCK_VIDEO_TYPE=MJPEG EXTERNAL_CAM=false NODE_ENV='development' PLATFORM='scini' DEBUG=$DEBUGFLAGS BOARD='surface' HARDWARE_MOCK=true DEV_MODE=false cacheDirectory='/tmp/cache' DATADIR='/tmp' LOG_LEVEL='debug' IGNORE_CACHE=true configfile='/tmp/rovconfig.json' pluginsDownloadDiretory='/tmp/plugins' photoDirectory="/tmp" video_url='http://'$EXTERNAL_CAM_IP':8081/bmimg' env plugins__ui-manager__selectedUI='new-ui' node --inspect src/cockpit.js 2>&1 | tee -a /opt/openrov/logs/`date +%d%h%H%M`-`basename $0`-$SETENV.txt
 else
-    USE_MOCK=false EXTERNAL_CAM=true EXTERNAL_CAM_URL='http://'$EXTERNAL_CAM_IP':8081/bmimg' NODE_ENV='production' PLATFORM='scini' BOARD='surface' HARDWARE_MOCK=false DEV_MODE=false cacheDirectory='/tmp/cache' DATADIR='/tmp' LOG_LEVEL='warn' IGNORE_CACHE=true configfile='/tmp/rovconfig.json' pluginsDownloadDiretory='/tmp/plugins' photoDirectory="/tmp" video_url='http://'$EXTERNAL_CAM_IP':8081/bmimg' env plugins__ui-manager__selectedUI='new-ui' node src/cockpit.js  2>&1 | tee -a /opt/openrov/logs/`date +%d%h%H%M`-`basename $0`.txt
+    USE_MOCK=false EXTERNAL_CAM=true EXTERNAL_CAM_URL='http://'$EXTERNAL_CAM_IP':8081/bmimg' NODE_ENV='production' PLATFORM='scini' BOARD='surface' HARDWARE_MOCK=false DEV_MODE=false cacheDirectory='/tmp/cache' DATADIR='/tmp' LOG_LEVEL='warn' IGNORE_CACHE=true configfile='/tmp/rovconfig.json' pluginsDownloadDiretory='/tmp/plugins' photoDirectory="/tmp" video_url='http://'$EXTERNAL_CAM_IP':8081/bmimg' env plugins__ui-manager__selectedUI='new-ui' node src/cockpit.js  2>&1 | tee -a /opt/openrov/logs/`date +%d%h%H%M`-`basename $0`-$SETENV.txt
 fi
 
 # Wait 10 seconds and then renice mjpg_streamer to -1
