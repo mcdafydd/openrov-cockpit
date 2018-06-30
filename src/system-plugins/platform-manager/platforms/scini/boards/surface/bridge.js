@@ -61,6 +61,7 @@ class Bridge extends EventEmitter
     this.globalBus = globalBus;
     this.mqttUri = 'ws://' + mqttBrokerIp + ':3000';
     this.parser = new pro4.Pro4();
+    this.DISABLED = 'DISABLED';
 
     this.depthHoldEnabled   = false;
     this.targetHoldEnabled  = false;
@@ -107,7 +108,7 @@ class Bridge extends EventEmitter
         depth:        0,
         depthOffset:  0,
         temp:  0,
-        pressure:     0  
+        pressure:     0
       },
       barometer:        {           // XXX - do we need this?
         temp:         0,
@@ -115,8 +116,8 @@ class Bridge extends EventEmitter
       },
       pro4:             {
         pro4Sync:       pro4.constants.SYNC_REQUEST8LE,
-        pro4Addresses:  [0x31,0x32,0x33,0x41,0x42,0x43],     
-        flags:          0x00,       // or 0x80  
+        pro4Addresses:  [0x31,0x32,0x33,0x41,0x42,0x43],
+        flags:          0x00,       // or 0x80
         csrAddress:     0xf0,       // custom command address
         lenNoop:        6,          // no write, just read all values
         lenBam:         11,         // send write to control servos, GPIOs
@@ -161,7 +162,7 @@ class Bridge extends EventEmitter
 
     // This loop should only emit data on the bus if the
     // pilot requests action
-    // payload first 2 bytes = 0x3549 
+    // payload first 2 bytes = 0x3549
     // valid values: open = 3 close = 2 stationary = 0
     this.gripperControl = {
       time:             0,
@@ -195,14 +196,14 @@ class Bridge extends EventEmitter
       }
     }
 
-    // Multicast motor control is the preferred method of operation to reduce 
+    // Multicast motor control is the preferred method of operation to reduce
     // serial contention and latency
     //
     // motors array of objects description
     // name = common name of motor position on vehicle
     // nodeId = PRO4 header node ID
-    // motorId = part of device protocol payload, used in PRO4 multicast packets 
-    //           to control individual motor values in packet addressed to multiple 
+    // motorId = part of device protocol payload, used in PRO4 multicast packets
+    //           to control individual motor values in packet addressed to multiple
     //           devices starts at 0 indicating first payload value
     //
     this.motorControl = {
@@ -228,7 +229,7 @@ class Bridge extends EventEmitter
           value:        0,      // thrust value (-1 to +1)
           reverse:      false,  // boolean
           fwdMod:       1.0,    // final forward thrust modifier
-          revMod:       1.0     // final reverse thrust modifier          
+          revMod:       1.0     // final reverse thrust modifier
         },
         {
           name:         "fore vertical",
@@ -265,7 +266,7 @@ class Bridge extends EventEmitter
         flags:          2,      // defined by VideoRay
         csrAddress:     0xf0,   // custom command address
         len:            2+4*5,   // 2 command bytes + 4 byte float * number of motors
-        payloadCmd:     0xaa   // defined by VideoRay 
+        payloadCmd:     0xaa   // defined by VideoRay
       }
     }
 
@@ -278,13 +279,14 @@ class Bridge extends EventEmitter
     return StateMachine.create({
       // target: this.FSM.prototype, // XXX - recommended factory method, why?
       initial: '_s_init',
-      events: [  
+      events: [
         { name: 'GetMoreHeaderData', from: '_s_init', to: '_s_pre_head' },
         { name: 'ValidateHeader', from: ['_s_init', '_s_pre_head'], to: '_s_validate_head' },
         { name: 'GetBody', from: '_s_validate_head', to: '_s_body' },
         { name: 'ValidateBody', from: '_s_body', to: '_s_validate_body'  },
         { name: 'ProcessPayload', from: '_s_validate_body', to: '_s_process_payload'  },
         { name: 'StopParsing', from: '*', to: '_s_stop'  },
+        { name: 'WaitForNext', from: '_s_stop', to: '_s_wait' },
         { name: 'ResetState', from: '*', to: '_s_init'    }
       ],
       callbacks: {
@@ -294,14 +296,15 @@ class Bridge extends EventEmitter
         on_s_body:            self.fsmEnterHandler,
         on_s_validate_body:   self.fsmEnterHandler,
         on_s_process_payload: self.fsmEnterHandler,
-        on_s_stop:            self.fsmEnterHandler
+        on_s_stop:            self.fsmEnterHandler,
+        on_s_wait:            self.fsmEnterHandler
       },
       error: {
 
       }
     });
   }
-  
+
   fsmEnterHandler(event, from, to)
   {
     logger.debug('BRIDGE: Parser moved from ' + from + ' to ' + to);
@@ -309,8 +312,8 @@ class Bridge extends EventEmitter
 
   connect()
   {
-    let self = this; 
-    
+    let self = this;
+
     logger.debug('BRIDGE: Starting connect() to MQTT broker');
 
     // Add SCINI device control interval functions
@@ -323,7 +326,7 @@ class Bridge extends EventEmitter
 
 
     // Connect to MQTT broker and setup all event handlers
-    // Note that platform code is loaded before MQTT broker plugin, so the 
+    // Note that platform code is loaded before MQTT broker plugin, so the
     // client may attempt a few reconnects until it is successful
     this.client = mqtt.connect(this.mqttUri, {
       protocolVersion: 4,
@@ -341,7 +344,7 @@ class Bridge extends EventEmitter
       logger.debug('BRIDGE: MQTT broker connection established!');
       logger.debug('BRIDGE: Creating surface subscriptions.');
       this.client.subscribe('status/+'); // receive all status topic messages
-      this.client.subscribe('thrusters/+'); // receive all motor control responses 
+      this.client.subscribe('thrusters/+'); // receive all motor control responses
       this.client.subscribe('sensors/+'); // receive all sensor telemetry
       this.client.subscribe('clump/+'); // receive all clump weight topics
       this.client.subscribe('vehicle/+'); // receive all vechicle topics
@@ -352,7 +355,7 @@ class Bridge extends EventEmitter
       this.mqttConnected = true;
       logger.debug('BRIDGE: MQTT broker re-connected!');
     });
-    
+
     this.client.on('offline', () => {
       this.mqttConnected = false;
       logger.debug('BRIDGE: MQTT broker connection offline!');
@@ -369,16 +372,16 @@ class Bridge extends EventEmitter
       if (clientId.match('elphelBOGUS-.*')) {
 
         // reset to init if last state was stop, otherwise read last known state
-        if (this.fsm[clientId].current == '_s_stop')
+        if (this.fsm[clientId].current == '_s_wait')
         {
-          this.fsm[clientId].ResetState();          
+          this.fsm[clientId].ResetState();
         }
-        
+
         // append message to the parseBuffer at "current", watch for overflow
-        if (message.length + this.clients[clientId].bufIdx 
+        if (message.length + this.clients[clientId].bufIdx
             <  this.clients[clientId].parseBuffer.length - pro4.constants.MAX_MESSAGE_SIZE)
         {
-          message.copy(this.clients[clientId].parseBuffer, 
+          message.copy(this.clients[clientId].parseBuffer,
                       this.clients[clientId].bufIdx);
         }
         else
@@ -395,7 +398,7 @@ class Bridge extends EventEmitter
         // so 100 is just a safety to make sure we exit the loop at some point
         // parser and buffer are only designed to handle partial packet receipt
         // and assume only one message in flight at a time
-        while (this.fsm[clientId].current != '_s_stop' && loop_count < 100)
+        while (this.fsm[clientId].current != '_s_wait' && loop_count < 100)
         {
           switch(this.fsm[clientId].current)
           {
@@ -423,7 +426,7 @@ class Bridge extends EventEmitter
                 // drop any leading non-interesting bytes
                 if (idx32 > 0)
                 {
-                  this.clients[clientId].parseBuffer = 
+                  this.clients[clientId].parseBuffer =
                       this.clients[clientId].parseBuffer.slice(idx32);
                 }
                 this.clients[clientId].parseIdx = 0;
@@ -443,7 +446,7 @@ class Bridge extends EventEmitter
                 // drop any leading non-packet bytes
                 if (idx8b > 0)
                 {
-                  this.clients[clientId].parseBuffer = 
+                  this.clients[clientId].parseBuffer =
                       this.clients[clientId].parseBuffer.slice(idx8b);
                 }
                 this.clients[clientId].parseIdx = 0;
@@ -507,11 +510,11 @@ class Bridge extends EventEmitter
                 loop_count += 1;
                 if (parsedObj.sync == pro4.constants.SYNC_RESPONSE32LE)
                 {
-                  this.clients[clientId].parseIdx += 10;                  
+                  this.clients[clientId].parseIdx += 10;
                 }
                 else if (parsedObj.sync == pro4.constants.SYNC_RESPONSE8BE)
                 {
-                  this.clients[clientId].parseIdx += 7;                  
+                  this.clients[clientId].parseIdx += 7;
                 }
                 this.fsm[clientId].GetBody();
               }
@@ -520,8 +523,8 @@ class Bridge extends EventEmitter
                 // toss existing data in buffer and reset
                 this.clients[clientId].parseIdx = 0;
                 this.clients[clientId].bufIdx = 0;
-                this.fsm[clientId].StopParsing();      
-              } 
+                this.fsm[clientId].StopParsing();
+              }
               break;
             }
 
@@ -574,29 +577,21 @@ class Bridge extends EventEmitter
 
             case '_s_process_payload':
             {
-              // remove current message from queue to continue servicing
-              if (typeof(clientId) != 'undefined') 
-              {
-                if (clientId.match('elphel.*')) 
-                {
-                  this.jobs[clientId].pop();
-                }
-              }
               // send response data to telemetry plugin
-              // all that is required is to send a text string of "key:value" 
+              // all that is required is to send a text string of "key:value"
               // to emitStatus(status)
               let value = 0;
               let telemetryId = '';
               let parsedObj = this.clients[clientId].parsedBody;
-              if (parsedObj.hasOwnProperty('id') 
+              if (parsedObj.hasOwnProperty('id')
                   && parsedObj.hasOwnProperty('payload')
-                  && parsedObj.hasOwnProperty('type')) 
+                  && parsedObj.hasOwnProperty('type'))
               {
                 let parentId = parsedObj.type + parsedObj.id.toString();
-                for (let prop in parsedObj.payload) 
+                for (let prop in parsedObj.payload)
                 {
                   // skip the uninteresting stuff
-                  if (prop === 'scni' 
+                  if (prop === 'scni'
                       || prop === 'len'
                       || prop === 'deviceType'
                       || prop === 'cmd')
@@ -614,7 +609,7 @@ class Bridge extends EventEmitter
                   }
                   else
                   {
-                    value = parsedObj.payload[prop];          
+                    value = parsedObj.payload[prop];
                     telemetryId = parentId + '.' + prop;
                   }
                   this.emitStatus(telemetryId + ':' + value);
@@ -629,6 +624,20 @@ class Bridge extends EventEmitter
 
             case '_s_stop':
             {
+              // remove current job from queue to continue servicing
+              if (typeof(clientId) != 'undefined')
+              {
+                if (clientId.match('elphel.*'))
+                {
+                  this.jobs[clientId].cb();
+                }
+              }
+              this.fsm[clientId].WaitForNext();
+              break;
+            }
+
+            case '_s_wait':
+            {
               break;
             }
           }
@@ -637,14 +646,14 @@ class Bridge extends EventEmitter
     });
 
     this.client.on('error', (err) => {
-      logger.debug('BRIDGE: MQTT error: ',err);
+      logger.debug('BRIDGE: MQTT error: ', err);
     });
 
     this.client.on('close', () => {
       // connection state is also set to false in class close() method
       this.mqttConnected = false;
       logger.debug('BRIDGE: MQTT broker connection closed!');
-    }); 
+    });
 
     this.globalBus.on('plugin.mqttBroker.clientConnected', (clientId) => {
       logger.debug('BRIDGE: Received MQTT clientConnected() from ' + clientId);
@@ -654,23 +663,34 @@ class Bridge extends EventEmitter
         // concurrency = 1 (one message in flight at a time)
         // max wait time for response = 20ms
         // autostart = always running if jobs are in queue
-        // results = store 
+        // results = store
         this.clients[clientId] = {};
         this.clients[clientId].bufIdx = 0; // points to end of received data in parseBuffer
         this.clients[clientId].parseIdx = 0; // points to current parser index
         this.clients[clientId].parseBuffer = new Buffer.alloc(1024);
         this.fsm[clientId] = self.createStateMachine();
         this.results[clientId] = [];
-        this.jobs[clientId] = new q({ 
-                                      concurrency: 1, 
-                                      timeout: 20, 
-                                      autostart: true, 
+        this.jobs[clientId] = new q({
+                                      concurrency: 1,
+                                      timeout: 20,
+                                      autostart: true,
                                       results: this.results[clientId]
                                     });
+        this.jobs[clientId].cb = function() {
+          // do nothing
+          return;
+        }
+        this.jobs[clientId].on('error', function (err, job) {
+          logger.error('BRIDGE: sendToMqtt() from clientId ', clientId, 'produced error: ', err);
+        });
         this.jobs[clientId].on('timeout', function (next, job) {
-          logger.debug('BRIDGE: job timed out:', job.toString().replace(/\n/g, ''));
+          logger.debug('BRIDGE: sendToMqtt() from clientId ', clientId, 'timed out');
           next();
         });
+        this.jobs[clientId].on('end', function () {
+          logger.debug('BRIDGE: all jobs done for clientId ', clientId);
+        });
+
       }
     });
     this.globalBus.on('plugin.mqttBroker.clientDisconnected', (clientId) => {
@@ -702,7 +722,7 @@ class Bridge extends EventEmitter
     clearInterval( self.motorInterval );
     clearInterval( self.rotateInterval );
     // clearInterval( self.gripperInterval);
-    
+
     self.client.end(false, () => {
       logger.debug('BRIDGE: MQTT this.client.end() returned.');
       self.mqttConnected = false;
@@ -724,24 +744,24 @@ class Bridge extends EventEmitter
     let commandText   = commandParts[0];
     let parameters    = commandParts[ 1 ].split( ',' );
 
-    switch (commandText) 
+    switch (commandText)
     {
-      case 'version': 
+      case 'version':
       {
         this.emitStatus('ver:<<{{10024121ae3fa7fc60a5945be1e155520fb929dd}}>>');
         debug('ver:<<{{10024121ae3fa7fc60a5945be1e155520fb929dd}}>>');
-        
+
         break;
       }
 
-      case 'wake': 
+      case 'wake':
       {
         this.emitStatus('awake:;');
 
         break;
       }
 
-      case 'ex_hello': 
+      case 'ex_hello':
       {
         let helloGoodbye = parseInt( parameters[0] );
 
@@ -753,7 +773,7 @@ class Bridge extends EventEmitter
         {
           this.emitStatus('example:Goodbye!;');
         }
-        
+
         break;
       }
 
@@ -809,42 +829,42 @@ class Bridge extends EventEmitter
           break;
       }
 
-      case 'ping': 
+      case 'ping':
       {
         this.emitStatus(`pong:${parameters[0]}`);
         logger.trace(`pong:${parameters[0]}`);
         break;
-      }      
+      }
 
-      case 'lights_tpow': 
-      { 
-        // Scale and limit power between 0 and 1 (maximums are 0, 1)   
-        let power = parameters[0] / 1000;  
+      case 'lights_tpow':
+      {
+        // Scale and limit power between 0 and 1 (maximums are 0, 1)
+        let power = parameters[0] / 1000;
         power = Math.max(power, 0);
         power = Math.min(power, 1.0);
 
 	// Ack command
 	this.emitStatus('lights_tpow:' + parameters[0] );
-	 
+
         // Update state object to be sent on next packet interval
         self.vehicleLights.power = power;
-        
+
         // DEBUG: dump values sent by OpenROV after scale/limit
         logger.debug('Light value: ' + power);
-        
+
         // Ack command
         setTimeout( function()
         {
           self.emitStatus('lights_pow:' + power );
         }, 250 );
-        
+
         break;
       }
 
-      case 'elights_tpow': 
+      case 'elights_tpow':
       {
-        // Scale and limit power between 0 and 1 (maximums are 0, 1)   
-        let power = parameters[0] / 1000;          
+        // Scale and limit power between 0 and 1 (maximums are 0, 1)
+        let power = parameters[0] / 1000;
         power = Math.max(power, 0);
         power = Math.min(power, 1.0);
 
@@ -853,20 +873,20 @@ class Bridge extends EventEmitter
 
         // Update state object to be sent on next packet interval
         self.clumpLights.power = power;
-        
+
         // DEBUG: dump values sent by OpenROV after scale/limit
         logger.debug('External lights value: ' + power);
-        
+
         // Ack command
         setTimeout( function()
         {
           self.emitStatus('elights_pow:' + power );
         }, 250 );
-        
-        break;        
+
+        break;
       }
 
-      case 'camServ_tpos': 
+      case 'camServ_tpos':
       {
         // Ack command
 
@@ -882,44 +902,44 @@ class Bridge extends EventEmitter
         break;
       }
 
-      case 'camServ_inv': 
+      case 'camServ_inv':
       {
         // Ack command
         this.emitStatus('camServ_inv:' + parameters[0] );
         break;
       }
 
-      case 'camServ_spd': 
+      case 'camServ_spd':
       {
         // Ack command
         let speed = parseInt( parameters[0] );
         this.emitStatus('camServ_spd:' + speed );
         break;
       }
-      
-      case 'eligt': 
+
+      case 'eligt':
       {
         this.emitStatus('LIGPE:' + parameters[0] / 100);
         logger.debug('External light status: ' + parameters[0] / 100);
         break;
       }
 
-      case 'escp': 
+      case 'escp':
       {
         this.emitStatus('ESCP:' + parameters[0]);
         logger.debug('ESC status: ' + parameters[0]);
         break;
       }
 
-      case 'claser': 
+      case 'claser':
       {
-        if (this.laserEnabled) 
+        if (this.laserEnabled)
         {
           this.laserEnabled = false;
           this.emitStatus('claser:0');
           logger.debug('Laser status: 0');
-        } 
-        else 
+        }
+        else
         {
           this.laserEnabled = true;
           this.emitStatus('claser:255');
@@ -929,63 +949,63 @@ class Bridge extends EventEmitter
         break;
       }
 
-      case 'holdDepth_on': 
+      case 'holdDepth_on':
       {
         let targetDepth = 0;
 
-        if (!this.depthHoldEnabled) 
+        if (!this.depthHoldEnabled)
         {
-          targetDepth = this.depthsensordepth;
+          targetDepth = this.sensors.depth.depth;
           this.depthHoldEnabled = true;
         }
 
-        this.emitStatus('targetDepth:' + (this.depthHoldEnabled ? targetDepth.toString() : DISABLED));
+        this.emitStatus('targetDepth:' + (this.depthHoldEnabled ? targetDepth.toString() : this.DISABLED));
         logger.debug('Depth hold enabled');
         break;
       }
 
-      case 'holdDepth_off': 
+      case 'holdDepth_off':
       {
-        targetDepth = -500;
+        let targetDepth = -500;
         this.depthHoldEnabled = false;
-        this.emitStatus('targetDepth:' + (this.depthHoldEnabled ? targetDepth.toString() : DISABLED));
+        this.emitStatus('targetDepth:' + (this.depthHoldEnabled ? targetDepth.toString() : this.DISABLED));
         logger.debug('Depth hold disabled');
         break;
       }
 
-      case 'holdHeading_on': 
+      case 'holdHeading_on':
       {
         let targetHeading = 0;
-        targetHeading = this.imu.yaw;
+        targetHeading = this.sensors.imu.yaw;
         this.targetHoldEnabled = true;
-        this.emitStatus('targetHeading:' + (this.targetHoldEnabled ? targetHeading.toString() : DISABLED));
+        this.emitStatus('targetHeading:' + (this.targetHoldEnabled ? targetHeading.toString() : this.DISABLED));
         logger.debug('Heading hold enabled');
         break;
       }
 
-      case 'holdHeading_off': 
+      case 'holdHeading_off':
       {
         let targetHeading = 0;
         targetHeading = -500;
         this.targetHoldEnabled = false;
-        this.emitStatus('targetHeading:' + (this.targetHoldEnabled ? targetHeading.toString() : DISABLED));
+        this.emitStatus('targetHeading:' + (this.targetHoldEnabled ? targetHeading.toString() : this.DISABLED));
         logger.debug('Heading hold disabled');
         break;
       }
 
-      case 'gripper_open': 
+      case 'gripper_open':
       {
         this.emitStatus('gripper.gripper_open:' + parameters[0]);
         break;
       }
 
-      case 'gripper_close': 
+      case 'gripper_close':
       {
         this.emitStatus('gripper.gripper_close:' + parameters[0]);
         break;
       }
 
-      case 'gripper_stationary': 
+      case 'gripper_stationary':
       {
         this.emitStatus('gripper.gripper_stationary:' + parameters[0]);
         break;
@@ -1024,7 +1044,7 @@ class Bridge extends EventEmitter
         if (parameters[3] < 0) {
           this.motorControl.motors[2].reverse = true;
           this.motorControl.motors[2].fwdMod = parameters[3] * 0.01;
-        }   
+        }
         else {
           this.motorControl.motors[2].reverse = false;
           this.motorControl.motors[2].fwdMod = parameters[3] * 0.01;
@@ -1066,7 +1086,7 @@ class Bridge extends EventEmitter
         }
         if (parameters[3] < 0) {
           this.motorControl.motors[2].revMod = parameters[3] * 0.01;
-        }   
+        }
         else {
           this.motorControl.motors[2].revMod = parameters[3] * 0.01;
         }
@@ -1076,13 +1096,13 @@ class Bridge extends EventEmitter
         else {
           this.motorControl.motors[1].revMod = parameters[4] * 0.01;
         }
-        
+
         this.emitStatus('motors.mtrmod2:' + parameters );
         break;
       }
 
       case 'throttle':
-      { 
+      {
         // Response_Thruster_Standard {
         //   /** Measured shaft rotational velocity */
         //   float rpm;
@@ -1100,7 +1120,7 @@ class Bridge extends EventEmitter
         // aa = propulsion command
         // 00 = after 0xaa this indicates no   de to respond with status
         // 00000000 = IEEE 754 thruster value for thruster 1 (4 bytes)
-        // 2b934509 = total crc       
+        // 2b934509 = total crc
         // Example payload, single thruster value (thrust = 0):
         // f5:5f:81:02:f0:06:ab:30:60:e5:aa:00:00:00:00:00:2b:93:45:09
         // Example payload, three thruster values (0.9, -0.7, 0.3):
@@ -1112,7 +1132,7 @@ class Bridge extends EventEmitter
 
         let thrust = parameters[0]; // must be converted to 32-bit IEEE 754 float in payload
 
-        // OpenROV sends values 0-100 based on system power level    
+        // OpenROV sends values 0-100 based on system power level
         thrust *= 0.01;
         if (thrust > 0) {
           thrust *= self.motorControl.motors[4].fwdMod;
@@ -1125,10 +1145,10 @@ class Bridge extends EventEmitter
 
         // Update state variable(s)
         if (self.motorControl.motors[4].reverse == true) {
-          self.motorControl.motors[4].value = thrust * -1;          
+          self.motorControl.motors[4].value = thrust * -1;
         }
         else {
-          self.motorControl.motors[4].value = thrust;          
+          self.motorControl.motors[4].value = thrust;
         }
 
         // DEBUG: dump values sent by OpenROV
@@ -1157,22 +1177,22 @@ class Bridge extends EventEmitter
         yaw = Math.max(yaw,-1.0);
         yaw = Math.min(yaw, 1.0);
         yaw2 = Math.max(yaw2,-1.0);
-        yaw2 = Math.min(yaw2, 1.0); 
+        yaw2 = Math.min(yaw2, 1.0);
 
         // Update state variable(s)
         if (self.motorControl.motors[1].reverse == true) {
-          self.motorControl.motors[1].value = yaw * -1;          
+          self.motorControl.motors[1].value = yaw * -1;
         }
         else {
-          self.motorControl.motors[1].value = yaw;         
+          self.motorControl.motors[1].value = yaw;
         }
         if (self.motorControl.motors[3].reverse == true) {
-          self.motorControl.motors[3].value = yaw2;          
+          self.motorControl.motors[3].value = yaw2;
         }
         else {
-          self.motorControl.motors[3].value = yaw2 * -1;         
+          self.motorControl.motors[3].value = yaw2 * -1;
         }
-        
+
         logger.debug('Sending yaw update: ' + yaw);
         // Ack command
         self.emitStatus('motors.yaw:' + yaw );
@@ -1183,35 +1203,35 @@ class Bridge extends EventEmitter
       {
         let lift = parameters[0]; // must be converted to 32-bit IEEE 754 float in payload
         let lift2 = parameters[0]; // supports thruster modifiers
-  
-        // OpenROV sends values 0-100 based on system power level    
+
+        // OpenROV sends values 0-100 based on system power level
         lift *= 0.01;
         lift2 *= 0.01;
         if (lift > 0) {
           lift *= self.motorControl.motors[0].fwdMod;
-          lift2 *= self.motorControl.motors[2].fwdMod;          
+          lift2 *= self.motorControl.motors[2].fwdMod;
         }
         if (lift < 0) {
           lift *= self.motorControl.motors[0].revMod;
-          lift2 *= self.motorControl.motors[2].revMod; 
+          lift2 *= self.motorControl.motors[2].revMod;
         }
         lift = Math.max(lift,-1.0);
         lift = Math.min(lift, 1.0);
         lift2 = Math.max(lift2,-1.0);
-        lift2 = Math.min(lift2, 1.0);               
-        
+        lift2 = Math.min(lift2, 1.0);
+
         // Update state variable(s)
         if (self.motorControl.motors[0].reverse == true) {
-          self.motorControl.motors[0].value = lift * -1;          
+          self.motorControl.motors[0].value = lift * -1;
         }
         else {
-          self.motorControl.motors[0].value = lift;         
+          self.motorControl.motors[0].value = lift;
         }
         if (self.motorControl.motors[2].reverse == true) {
-          self.motorControl.motors[2].value = lift2 * -1;          
+          self.motorControl.motors[2].value = lift2 * -1;
         }
         else {
-          self.motorControl.motors[2].value = lift2;         
+          self.motorControl.motors[2].value = lift2;
         }
 
         logger.debug('Sending lift update: ' + lift);
@@ -1225,7 +1245,7 @@ class Bridge extends EventEmitter
         let pitch = parameters[0]; // must be converted to 32-bit IEEE 754 float in payload
         let pitch2 = parameters[0]; // supports thruster modifiers
 
-        // OpenROV sends values 0-100 based on system power level    
+        // OpenROV sends values 0-100 based on system power level
         pitch *= 0.01;
         pitch2 *= 0.01;
         if (pitch > 0) {
@@ -1243,16 +1263,16 @@ class Bridge extends EventEmitter
 
         // Update state variable(s)
         if (self.motorControl.motors[0].reverse == true) {
-          self.motorControl.motors[0].value = pitch * -1;          
+          self.motorControl.motors[0].value = pitch * -1;
         }
         else {
-          self.motorControl.motors[0].value = pitch;         
+          self.motorControl.motors[0].value = pitch;
         }
         if (self.motorControl.motors[2].reverse == true) {
-          self.motorControl.motors[2].value = pitch;          
+          self.motorControl.motors[2].value = pitch;
         }
         else {
-          self.motorControl.motors[2].value = pitch * -1;         
+          self.motorControl.motors[2].value = pitch * -1;
         }
 
         logger.debug('Sending pitch update: ' + pitch);
@@ -1262,21 +1282,21 @@ class Bridge extends EventEmitter
       }
 
       case 'strafe':
-      { 
+      {
 
         let strafe = parameters[0]; // must be converted to 32-bit IEEE 754 float in payload
         let strafe2 = parameters[0]; // supports thruster modifiers
 
-        // OpenROV sends values 0-100 based on system power level    
-        strafe *= 0.01;  
+        // OpenROV sends values 0-100 based on system power level
+        strafe *= 0.01;
         strafe2 *= 0.01;
         if (strafe > 0) {
           strafe *= self.motorControl.motors[1].fwdMod;
-          strafe2 *= self.motorControl.motors[3].fwdMod;          
+          strafe2 *= self.motorControl.motors[3].fwdMod;
         }
         if (strafe < 0) {
           strafe *= self.motorControl.motors[1].revMod;
-          strafe2 *= self.motorControl.motors[3].revMod; 
+          strafe2 *= self.motorControl.motors[3].revMod;
         }
         strafe = Math.max(strafe,-1.0);
         strafe = Math.min(strafe, 1.0);
@@ -1285,25 +1305,25 @@ class Bridge extends EventEmitter
 
         // Update state variable(s)
         if (self.motorControl.motors[1].reverse == true) {
-          self.motorControl.motors[1].value = strafe * -1;          
+          self.motorControl.motors[1].value = strafe * -1;
         }
         else {
-          self.motorControl.motors[1].value = strafe;         
+          self.motorControl.motors[1].value = strafe;
         }
         if (self.motorControl.motors[3].reverse == true) {
-          self.motorControl.motors[3].value = strafe2 * -1;          
+          self.motorControl.motors[3].value = strafe2 * -1;
         }
         else {
-          self.motorControl.motors[3].value = strafe2;         
+          self.motorControl.motors[3].value = strafe2;
         }
-        
+
         logger.debug('Sending strafe update: ' + strafe);
         // Ack command
         self.emitStatus('motors.strafe:' + strafe );
         break;
       }
 
-      default: 
+      default:
       {
         logger.debug('Unsupported command: ' + commandText);
       }
@@ -1318,21 +1338,22 @@ class Bridge extends EventEmitter
     let self = this;
     // keep it simple - add packetBuf to each client queue (queues only get created on elphels)
     for ( let clientId in self.jobs ) {
-      self.jobs[clientId].push(function () { return self.sendToMqtt(clientId, packetBuf); });  
+      let cb = self.jobs[clientId].cb;
+      self.jobs[clientId].push(function (cb) { return self.sendToMqtt(clientId, packetBuf); });
     }
   }
 
   sendToMqtt ( clientId, packetBuf )
   {
     let self = this;
-    if( self.mqttConnected ) 
+    if( self.mqttConnected )
     {
       self.client.publish('toScini/' + clientId, packetBuf);
-      if( self.emitRawSerial ) 
+      if( self.emitRawSerial )
       {
         self.emit('serial-sent', packetBuf );
       }
-    } 
+    }
     else
     {
       logger.debug('BRIDGE: DID NOT SEND TO ROV - client ' + clientId + ' not connected');
@@ -1371,7 +1392,7 @@ class Bridge extends EventEmitter
     // emit to telemetry plugin
     this.globalBus.emit('mcu.status', txtStatus);
 
-    if (this.emitRawSerial) 
+    if (this.emitRawSerial)
     {
       this.emit('serial-received', status);
     }
@@ -1403,7 +1424,7 @@ class Bridge extends EventEmitter
       return ( intIn * 0.001 );
   }
 
-  mapTo(value, in_min, in_max, out_min, out_max) 
+  mapTo(value, in_min, in_max, out_min, out_max)
   {
     return (value - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
   }
@@ -1411,9 +1432,9 @@ class Bridge extends EventEmitter
   normalizeAngle360( a )
   {
     return ((a > 360.0) ? (a - 360.0) : ((a < 0.0) ? (a + 360.0) : a));
-  } 
+  }
 
-  normalizeAngle180( a ) 
+  normalizeAngle180( a )
   {
     return ((a > 180.0) ? (a - 360.0) : ((a < -180.0) ? (a + 360.0) : a));
   }
@@ -1454,7 +1475,6 @@ class Bridge extends EventEmitter
         // Packet len = Header + 4-byte CRC + payload + 4-byte CRC = 27
         let packetBuf = self.parser.encode(p.pro4Sync, p.pro4Addresses[j], p.flags, p.csrAddress, p.len, payload);
         // maintain light state by updating at least once per second
-        // self.sendToMqtt(packetBuf);
         self.addToQueue(packetBuf);
       })();
     }
@@ -1466,7 +1486,6 @@ class Bridge extends EventEmitter
         // Packet len = Header + 4-byte CRC + payload + 4-byte CRC = 27
         let packetBuf = self.parser.encode(p2.pro4Sync, p2.pro4Addresses[j], p2.flags, p2.csrAddress, p2.len, clumpPayload);
         // maintain light state by updating at least once per second
-        // self.sendToMqtt(packetBuf);
         self.addToQueue(packetBuf);
       })();
     }
@@ -1480,7 +1499,7 @@ class Bridge extends EventEmitter
   {
     let self = this;
     let packetBuf;
-    
+
     // Update time
     this.motorControl.time += this.motorControl.timeDelta_ms;
     // Sample motor payload
@@ -1507,7 +1526,6 @@ class Bridge extends EventEmitter
       // first address in array is a multicast group
       packetBuf = self.parser.encode(p.pro4Sync, p.pro4Addresses[0], p.flags, p.csrAddress, p.len, payload);
       // maintain state by updating at least once per second
-      // self.sendToMqtt(packetBuf);
       self.addToQueue(packetBuf);
     }
     else {
@@ -1519,7 +1537,6 @@ class Bridge extends EventEmitter
           // Packet len = Header + 4-byte CRC + payload + 4-byte CRC = 27
           packetBuf = self.parser.encode(p.pro4Sync, m[j].nodeId, p.flags, p.csrAddress, p.len, payload);
           // maintain light state by updating at least once per second
-          // self.sendToMqtt(packetBuf);
           self.addToQueue(packetBuf);
         })();
       }
@@ -1527,7 +1544,7 @@ class Bridge extends EventEmitter
 
     let x, y;
     for (x = 0; y <  m.length; x++) {
-      payload.writeFloatLE(thrust, 2);    
+      payload.writeFloatLE(thrust, 2);
     }
 
     // Emit status update
@@ -1539,7 +1556,7 @@ class Bridge extends EventEmitter
   {
     let self = this;
 
-    if (self.motorControl.responderIdx >= self.motorControl.motors.length-1 || 
+    if (self.motorControl.responderIdx >= self.motorControl.motors.length-1 ||
         self.motorControl.responderIdx < 0) {
           self.motorControl.responderIdx = 0;
     }
@@ -1552,7 +1569,7 @@ class Bridge extends EventEmitter
     // XXX - grippers not being used at the moment so this function is incomplete
     let self = this;
     let packetBuf;
-    
+
     // Update time
     this.gripperControl.time += this.gripperControl.timeDelta_ms;
 
@@ -1561,7 +1578,7 @@ class Bridge extends EventEmitter
 
     // convert OpenROV target thrust to 32-bit LE floats and build payload
     let payload = new Buffer.allocUnsafe(this.gripperControl.pro4.len);
-    
+
     // shorter names for easier reading
     let g = this.gripperControl.grippers;
     let p = this.gripperControl.pro4;
@@ -1577,7 +1594,6 @@ class Bridge extends EventEmitter
       // first address in array is a multicast group
       packetBuf = self.parser.encode(p.pro4Sync, p.pro4Addresses[0], p.flags, p.csrAddress, p.len, payload);
       // maintain state by updating at least once per second
-      // self.sendToMqtt(packetBuf);
       self.addToQueue(packetBuf);
     }
     else {
@@ -1589,7 +1605,6 @@ class Bridge extends EventEmitter
           // Packet len = Header + 4-byte CRC + payload + 4-byte CRC = 27
           packetBuf = self.parser.encode(p.pro4Sync, m[j].nodeId, p.flags, p.csrAddress, p.len, payload);
           // maintain light state by updating at least once per second
-          // self.sendToMqtt(packetBuf);
           self.addToQueue(packetBuf);
         })();
       }
@@ -1598,7 +1613,7 @@ class Bridge extends EventEmitter
 
     let x, y;
     for (x = 0; y <  m.length; x++) {
-      payload.writeFloatLE(thrust, 2);    
+      payload.writeFloatLE(thrust, 2);
     }
     */
     logger.debug('Received gripper command, not used.');
@@ -1610,14 +1625,14 @@ class Bridge extends EventEmitter
   {
     let self = this;
     let type = 'BAM';  // 'NOOP' (read) or 'BAM' (read / write servos, GPIOs)
-    
+
     // shorter name for easier reading
     let p = self.sensors.pro4;
 
-    // Update time -- fix this to only set in request or response for all 
+    // Update time -- fix this to only set in request or response for all
     // intervals
     self.sensors.time += self.sensors.timeDelta_ms;
-    
+
     let payload = new Buffer.allocUnsafe(self.sensors.pro4.lenBam);
     payload.writeUInt32BE(p.payloadHeader, 0);  // "SCNI"
     payload.writeUInt8(p.payloadLenBam, 4);     // payload len
@@ -1625,14 +1640,13 @@ class Bridge extends EventEmitter
     payload.writeUInt16BE(p.payloadServo1, 6);  // payload servo1
     payload.writeUInt16BE(p.payloadServo2, 8);  // payload servo2
     payload.writeUInt8(p.payloadGpio, 10);      // payload gpio
-   
+
     // Generate new pro4 packet for each address and send to all light modules
     for (let i = 0; i < p.pro4Addresses.length; i++) {
       (function() {
         let j = i;  // loop closure
         // Packet len = Header + 1-byte CRC + payload + 1-byte CRC = 14
         let packetBuf = self.parser.encode(p.pro4Sync, p.pro4Addresses[j], p.flags, p.csrAddress, p.lenBam, payload);
-        // self.sendToMqtt(packetBuf);
         self.addToQueue(packetBuf);
       })();
     }
@@ -1648,10 +1662,10 @@ class Bridge extends EventEmitter
 
       // Generate pitch -90:90 degrees
       this.sensors.imu.pitch = 90 * Math.sin( this.sensors.time * ( Math.PI / 10000 ) );
-      
+
       // Generate roll -90:90 degrees
       this.sensors.imu.roll = 90 * Math.sin( this.sensors.time * ( Math.PI / 30000 ) );
-      
+
       // Generate yaw between -120:120 degrees
       let baseYaw = 120 * Math.sin( this.sensors.time * ( Math.PI / 10000 ) );
 
