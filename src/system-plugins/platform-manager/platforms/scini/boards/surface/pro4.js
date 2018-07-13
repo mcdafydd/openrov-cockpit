@@ -33,22 +33,23 @@
 
 const logger        = require('AppFramework.js').logger;
 const Parser        = require('binary-parser').Parser;
+const StateMachine  = require('javascript-state-machine');
 const CRC           = require('crc');
 
 // ******************************************************************
 //  Device types are defined by VideoRay
-//  See sample code at https://github.com/videoray/VRCommsProtocol_doc 
+//  See sample code at https://github.com/videoray/VRCommsProtocol_doc
 //  for more info.
 //  Protocol constants
 //  See https://github.com/videoray/VRCommsProtocol_doc/blob/master/pro4%20sample/inc/protocol_pro4.h
 //
 // @name Predefined Registers
 //
-// The ADDR_UTILITY register is used for device independent actions, such as 
+// The ADDR_UTILITY register is used for device independent actions, such as
 // requesting the device eummeration data
 // The ADDR_REBOOT register is 16-bit at addresses 0xFE-0xFF
 // Writing the value 0xDEAD into the Utility register should cause the // device to reboot after a delay.
-// 
+//
 // Allows for the encapsulation of a custom command protocol
 // ******************************************************************
 
@@ -66,14 +67,22 @@ const constants = {
   DEVICE_KCF_SMART_TETHER_NODE: 0x50,
   PROTOCOL_PRO4_HEADER_SIZE: 6,
   PROTOCOL_PRO4_RESPONSE_DATA_PAYLOAD_START_INDEX: 8,
+  SYNC_REQUEST32_b1: 0xF5,  // CRCs are four bytes
+  SYNC_REQUEST32_b2: 0x5F,  // CRCs are four bytes
+  SYNC_REQUEST8_b1: 0xFA,   // CRCs are one bytes
+  SYNC_REQUEST8_b2: 0xAF,   // CRCs are one bytes
+  SYNC_RESPONSE32_b1: 0xF0,  // CRCs are four bytes
+  SYNC_RESPONSE32_b2: 0x0F,  // CRCs are four bytes
+  SYNC_RESPONSE8_b1: 0xFD,   // CRCs are one bytes
+  SYNC_RESPONSE8_b2: 0xDF,   // CRCs are one bytes
   SYNC_REQUEST8LE: 0xAFFA,  // CRCs are one byte
-  SYNC_REQUEST32LE: 0x5FF5,  // CRCs are four bytes
+  SYNC_REQUEST32LE: 0x5FF5, // CRCs are four bytes
   SYNC_REQUEST8BE: 0xFAAF,  // CRCs are one byte
-  SYNC_REQUEST32BE: 0xF55F,  // CRCs are four bytes
-  SYNC_RESPONSE8LE: 0xDFFD,  // parsed endianness, CRCs one byte
-  SYNC_RESPONSE32LE: 0x0FF0,  // parsed endianness, CRCs four bytes
-  SYNC_RESPONSE8BE: 0xFDDF,  // parsed endianness, CRCs one byte
-  SYNC_RESPONSE32BE: 0xF00F,  // parsed endianness, CRCs four bytes
+  SYNC_REQUEST32BE: 0xF55F, // CRCs are four bytes
+  SYNC_RESPONSE8LE: 0xDFFD, // parsed endianness, CRCs one byte
+  SYNC_RESPONSE32LE: 0x0FF0, // parsed endianness, CRCs four bytes
+  SYNC_RESPONSE8BE: 0xFDDF, // parsed endianness, CRCs one byte
+  SYNC_RESPONSE32BE: 0xF00F, // parsed endianness, CRCs four bytes
   ID_BROADCAST: 0xFF,
   ID_MULTICAST_FLAG: 0x80,
   ID_RELAY_REQUEST_FLAG: 0x40,
@@ -89,72 +98,47 @@ const constants = {
   ADDR_UTILITY: 0xFE,
   ADDR_REBOOT: 0xFE,
   REBOOT_CODE: 0xADDE,  // LSB First
-  STATUS_SUCCESS: 1,    // PRO4 parser success - used by bridge state machine
-  STATUS_ERROR: 2,      // PRO4 parser error - used by bridge state machine
-  MAX_MESSAGE_SIZE: 256 // Used by PRO4 parser
-}; 
+  STATUS_SUCCESS: 1,    // PRO4 parser success
+  STATUS_ERROR: 2,      // PRO4 parser error
+  STATUS_MOREDATA: 3,   // PRO4 current state awaiting more data
+  MAX_MESSAGE_SIZE: 255 // Used by PRO4 parser
+};
 
 class Pro4
 {
   constructor()
   {
     this.constants = constants;
-
-    // stop parser to terminate parsing
-    this.stop = new Parser();
-
-    // Define a parser for the board information stored on the controller board's eeprom
-    this.ParserCrc8 = new Parser()
-      .endianess('little')
-      .uint8('headerCrc');
-
-    this.ParserCrc32 = new Parser()
-      .endianess('little')
-      .uint32('headerCrc');
-
-    this.ParserHead = new Parser()
-      .endianess('little')
-      .uint16('sync', {
-        assert: function(x) {
-          // 'this' context not accessible here
-          // matches SYNC_REQUEST8LE or SYNC_REQUEST32LE or "mqttClientConnected"
-          if (!(x === 0xdffd || x === 0x0ff0 || x === 29037)) {
-              console.log('PRO4: Partial or non-PRO4 packet sent to parser');
-          } 
-          return true; // always return true to prevent interruption
-        } 
-      })
-      .uint8('id')
-      .uint8('flags')
-      .uint8('csrAddress')
-      .uint8('payloadLength')
-      .choice('crcType', {
-        tag: 'sync',
-        defaultChoice: this.stop,
-        choices: {
-          // 0xfddf response (arrives as 0xdffd)
-          57341: Parser.start().nest('crc8', { type: this.ParserCrc8 }),
-          // 0xf00f response (arrives as 0x0ff0)
-          4080: Parser.start().nest('crc32', { type: this.ParserCrc32 })
-        }
-      })
+    this.counter = 1; // used for variable length fields
+    this.headBuf = new Buffer.allocUnsafe(6); // temporary head buffer for crc
+    this.parsedObj = {
+      sync1: 0,
+      sync2: 0,
+      id: 0,
+      flags: 0,
+      csrAddress: 0,
+      payloadLen: 0,
+      crcHead: 0,
+      payload: 0,
+      crcTotal: 0,
+      device: {},
+      status: 0
+    };
 
     // VideoRay PRO4 thruster response payload
     this.ParserMotors = new Parser()
-      .endianess('little')
-      .float('rpm')
-      .float('bus_v')
-      .float('bus_i')
-      .float('temp')
+      .floatle('rpm')
+      .floatle('bus_v')
+      .floatle('bus_i')
+      .floatle('temp')
       .uint8('fault');
 
     // VideoRay PRO4 light module response payload
     this.ParserLights = new Parser()
-      .endianess('little')
       .uint8('deviceType')
-      .float('bus_v')
-      .float('bus_i')
-      .float('temp')
+      .floatle('bus_v')
+      .floatle('bus_i')
+      .floatle('temp')
       .uint8('fault');
 
     // SCINI crumb644 PRO4 response payload
@@ -183,14 +167,14 @@ class Pro4
         type: 'floatle',
         length: 3
       })
-      .floatle('adc48v')      
-      .floatle('adc24v')      
-      .floatle('adc12v')            
-      .floatle('kellerTemperature')      
+      .floatle('adc48v')
+      .floatle('adc24v')
+      .floatle('adc12v')
+      .floatle('kellerTemperature')
       .floatle('kellerPressure')
       .uint8('kellerStatus')
       .uint8('pad')
-      
+
     // SCINI crumb644 PRO4 response payload
     this.ParserBam = new Parser()
       .string('scni', { length: 4 })
@@ -216,10 +200,10 @@ class Pro4
         type: 'floatle',
         length: 3
       })
-      .floatle('adc48v')      
-      .floatle('adc24v')      
-      .floatle('adc12v')            
-      .floatle('kellerTemperature')      
+      .floatle('adc48v')
+      .floatle('adc24v')
+      .floatle('adc12v')
+      .floatle('kellerTemperature')
       .floatle('kellerPressure')
       .uint8('kellerStatus')
       .uint8('pad')
@@ -232,7 +216,388 @@ class Pro4
       .int16le('rot_x')
       .int16le('rot_y')
       .int16le('rot_z')
+
+    this.fsm = this.createStateMachine();
+  };
+
+  fsmEnterHandler(event, from, to)
+  {
+    logger.debug('BRIDGE: Parser moved from ' + from + ' to ' + to);
+  };
+
+  createStateMachine()
+  {
+    let self = this;
+
+    return StateMachine.create({
+      // target: this.FSM.prototype, // XXX - recommended factory method, why?
+      initial: '_s_sync1',
+      events: [
+        { name: 'GetSync2', from: '_s_sync1', to: '_s_sync2' },
+        { name: 'GetId', from: '_s_sync2', to: '_s_id' },
+        { name: 'GetFlags', from: '_s_id', to: '_s_flags' },
+        { name: 'GetCsr', from: '_s_flags', to: '_s_csrAddress' },
+        { name: 'GetPayloadLen', from: '_s_csrAddress', to: '_s_payloadLen' },
+        { name: 'GetCrcHead', from: '_s_payloadLen', to: '_s_crcHead' },
+        { name: 'GetPayload', from: '_s_crcHead', to: '_s_payload' },
+        { name: 'GetCrcTotal', from: '_s_payload', to: '_s_crcTotal' },
+        { name: 'ResetState', from: '*', to: '_s_sync1' }
+      ],
+      callbacks: {
+        on_s_sync1:           self.fsmEnterHandler,
+        on_s_sync2:           self.fsmEnterHandler,
+        on_s_id:              self.fsmEnterHandler,
+        on_s_flags:           self.fsmEnterHandler,
+        on_s_csrAddress:      self.fsmEnterHandler,
+        on_s_payloadLen:      self.fsmEnterHandler,
+        on_s_crcHead:         self.fsmEnterHandler,
+        on_s_payload:         self.fsmEnterHandler,
+        on_s_crcTotal:        self.fsmEnterHandler
+      }
+    });
+  };
+
+  reset()
+  {
+    let self = this;
+    self.counter = 1;
+    self.parsedObj = {
+      sync1: 0,
+      sync2: 0,
+      id: 0,
+      flags: 0,
+      csrAddress: 0,
+      payloadLen: 0,
+      crcHead: 0,
+      payload: 0,
+      crcTotal: 0,
+      device: {},
+      status: 0
+    };
+    self.fsm.ResetState();
   }
+
+  parsePayload()
+  {
+    switch(this.parsedObj.id)
+    {
+      case 11:
+      {
+        return(this.ParserMotors.parse(this.parsedObj.payload));
+      }
+      case 12:
+      {
+        return(this.ParserMotors.parse(this.parsedObj.payload));
+      }
+      case 13:
+      {
+        return(this.ParserMotors.parse(this.parsedObj.payload));
+      }
+      case 14:
+      {
+        return(this.ParserMotors.parse(this.parsedObj.payload));
+      }
+      case 15:
+      {
+        return(this.ParserMotors.parse(this.parsedObj.payload));
+      }
+      case 16:
+      {
+        return(this.ParserMotors.parse(this.parsedObj.payload));
+      }
+      case 17:
+      {
+        return(this.ParserMotors.parse(this.parsedObj.payload));
+      }
+      case 31:
+      {
+        return(this.ParserBam44.parse(this.parsedObj.payload));
+      }
+      case 32:
+      {
+        return(this.ParserBam44.parse(this.parsedObj.payload));
+      }
+      case 33:
+      {
+        return(this.ParserBam44.parse(this.parsedObj.payload));
+      }
+      case 34:
+      {
+        return(this.ParserBam44.parse(this.parsedObj.payload));
+      }
+      case 41:
+      {
+        return(this.ParserBam44.parse(this.parsedObj.payload));
+      }
+      case 42:
+      {
+        return(this.ParserBam44.parse(this.parsedObj.payload));
+      }
+      case 43:
+      {
+        return(this.ParserBam44.parse(this.parsedObj.payload));
+      }
+      case 44:
+      {
+        return(this.ParserBam44.parse(this.parsedObj.payload));
+      }
+      case 61:
+      {
+        return(this.ParserLights.parse(this.parsedObj.payload));
+      }
+      case 62:
+      {
+        return(this.ParserLights.parse(this.parsedObj.payload));
+      }
+      case 63:
+      {
+        return(this.ParserLights.parse(this.parsedObj.payload));
+      }
+      case 64:
+      {
+        return(this.ParserLights.parse(this.parsedObj.payload));
+      }
+    }
+  }
+  // Decode PRO4 response, calculate checksum, and pass to device parser
+  parse(buf)
+  {
+    let self = this;
+    let idx = 0;
+
+    while (idx < buf.length)
+    {
+      switch(self.fsm.current)
+      {
+        case '_s_sync1':
+        {
+          if (buf[idx] == self.constants.SYNC_RESPONSE8_b1 ||
+              buf[idx] == self.constants.SYNC_RESPONSE32_b1)
+          {
+            self.parsedObj.sync1 = buf[idx];
+            self.headBuf[0] = buf[idx];
+          }
+          else
+          {
+            logger.debug('Invalid PRO4 response at byte = ', buf[idx], 'state = ', self.fsm.current);
+            self.reset();
+            return({status: self.constants.STATUS_ERROR});
+          }
+          self.fsm.GetSync2();
+          break;
+        }
+        case '_s_sync2':
+        {
+          if ((buf[idx] == self.constants.SYNC_RESPONSE8_b2 && self.parsedObj.sync1 == self.constants.SYNC_RESPONSE8_b1) ||
+              (buf[idx] == self.constants.SYNC_RESPONSE32_b2 && self.parsedObj.sync1 == self.constants.SYNC_RESPONSE32_b1))
+          {
+            self.parsedObj.sync2 = buf[idx];
+            self.headBuf[1] = buf[idx];
+          }
+          else
+          {
+            logger.debug('Invalid PRO4 response at byte = ', buf[idx], 'state = ', self.fsm.current);
+            self.reset();
+            return({status: self.constants.STATUS_ERROR});
+          }
+          self.fsm.GetId();
+          break;
+        }
+        case '_s_id':
+        {
+          if (buf[idx] >= 1 && buf[idx] <= 127)
+          {
+            self.parsedObj.id = buf[idx];
+            self.headBuf[2] = buf[idx];
+            self.fsm.GetFlags();
+          }
+          else
+          {
+            logger.debug('Invalid PRO4 response device ID = ', buf[idx]);
+            self.reset();
+            return({status: self.constants.STATUS_ERROR});
+          }
+          break;
+        }
+        case '_s_flags':
+        {
+          self.parsedObj.flags = buf[idx];
+          self.headBuf[3] = buf[idx];
+          self.fsm.GetCsr();
+          break;
+        }
+        case '_s_csrAddress':
+        {
+          self.parsedObj.csrAddress = buf[idx];
+          self.headBuf[4] = buf[idx];
+          self.fsm.GetPayloadLen();
+          break;
+        }
+        case '_s_payloadLen':
+        {
+          self.parsedObj.payloadLen = buf[idx];
+          self.headBuf[5] = buf[idx];
+          self.fsm.GetCrcHead();
+          break;
+        }
+        case '_s_crcHead':
+        {
+          if (self.parsedObj.sync1 == self.constants.SYNC_RESPONSE8_b1)
+          {
+            self.counter = 1;
+
+            let chksum = self.parsedObj.sync1 ^ self.parsedObj.sync2 ^ self.parsedObj.id ^ self.parsedObj.flags ^ self.parsedObj.csrAddress ^ self.parsedObj.payloadLen;
+
+            if (buf[idx] != chksum)
+            {
+              logger.warn('BRIDGE: Bad header CRC; possible id = ' + self.parsedObj.id);
+              self.reset();
+              return({status: self.constants.STATUS_ERROR});
+            }
+            self.parsedObj.crcHead = buf[idx];
+            self.fsm.GetPayload();
+          }
+          else // 4-byte CRC
+          {
+            if (self.counter == 1)
+            {
+              self.parsedObj.crcHead = new Buffer.allocUnsafe(4);
+            }
+            if (self.counter > 0 && self.counter < self.parsedObj.crcHead.length) // need more data
+            {
+              self.parsedObj.crcHead[self.counter-1] = buf[idx];
+              self.counter++;
+              if (buf.length-idx+1 < self.parsedObj.crcHead.length) // need to wait for next message
+              {
+                self.parsedObj.status = self.constants.STATUS_MOREDATA;
+              }
+              break;
+            }
+            else if (self.counter == self.parsedObj.crcHead.length)
+            {
+              self.parsedObj.crcHead[self.counter-1] = buf[idx];
+              let calcdChksum = CRC.crc32(self.headBuf); // calculate checksum of received data
+              if (calcdChksum != self.parsedObj.crcHead.readUInt32LE(0))
+              {
+                logger.warn('BRIDGE: Bad header CRC32; possible id = ' + self.parsedObj.id);
+                self.reset();
+                return({status: self.constants.STATUS_ERROR});
+              }
+              self.counter = 1;
+              self.fsm.GetPayload();
+            }
+            else // something went awry
+            {
+              logger.warn('BRIDGE: Something went wrong with header CRC32; possible id = ' + self.parsedObj.id);
+              self.reset();
+              return({status: self.constants.STATUS_ERROR});
+            }
+          }
+          break;
+        }
+        case '_s_payload':
+        {
+          if (self.counter == 1)
+          {
+            self.parsedObj.payload = new Buffer.allocUnsafe(self.parsedObj.payloadLen);
+          }
+          if (self.counter > 0 && self.counter < self.parsedObj.payloadLen) // need more data
+          {
+            self.parsedObj.payload[self.counter-1] = buf[idx];
+            self.counter++;
+            if (buf.length-idx+1 < self.parsedObj.payloadLen) // need to wait for next message
+            {
+              self.parsedObj.status = self.constants.STATUS_MOREDATA;
+            }
+            break;
+          }
+          else if (self.counter == self.parsedObj.payloadLen)
+          {
+            self.parsedObj.payload[self.counter-1] = buf[idx];
+            self.counter = 1;
+          }
+          else // something went awry
+          {
+            logger.warn('BRIDGE: Something went wrong with payload parsing; possible id = ' + self.parsedObj.id);
+            self.reset();
+            return({status: self.constants.STATUS_ERROR});
+          }
+          self.fsm.GetCrcTotal();
+          break;
+        }
+        case '_s_crcTotal':
+        {
+          if (self.parsedObj.sync1 == self.constants.SYNC_RESPONSE8_b1)
+          {
+            let chksum = self.parsedObj.payload[0];
+            for (let i = 1; i < self.parsedObj.payloadLen; i++) {
+              chksum ^= self.parsedObj.payload[i];
+            }
+            if (buf[idx] != chksum)
+            {
+              logger.warn('BRIDGE: Bad total CRC; ', chksum, 'vs ', buf[idx], '; possible id = ' + self.parsedObj.id);
+              self.reset();
+              return({status: self.constants.STATUS_ERROR});
+            }
+            else
+            {
+              // got a good full packet!  Pass it to payload parser
+              logger.info('BRIDGE: Good total CRC finally!  Id = ', self.parsedObj.id);
+              self.parsedObj.crcTotal = buf[idx];
+              self.parsedObj.status = self.constants.STATUS_SUCCESS;
+              self.parsedObj.device = self.parsePayload(self.parsedObj.id, self.parsedObj.payload, self.p);
+              return(self.parsedObj);
+
+            }
+          }
+          else // 4-byte CRC
+          {
+            if (self.counter == 1)
+            {
+              self.parsedObj.crcTotal = new Buffer.allocUnsafe(4);
+            }
+            if (self.counter > 0 && self.counter < self.parsedObj.crcTotal.length) // need more data
+            {
+              self.parsedObj.crcTotal[self.counter-1] = buf[idx];
+              self.counter++;
+              if (buf.length-idx+1 < self.parsedObj.crcTotal.length) // need to wait for next message
+              {
+                self.parsedObj.status = self.constants.STATUS_MOREDATA;
+              }
+              break;
+            }
+            else if (self.counter == self.parsedObj.crcTotal.length)
+            {
+              self.parsedObj.crcTotal[self.counter-1] = buf[idx];
+              let calcdChksum = CRC.crc32(self.parsedObj.payload); // calculate checksum of received data
+              if (calcdChksum != self.parsedObj.crcTotal.readUInt32LE(0))
+              {
+                logger.warn('BRIDGE: Bad total CRC32; possible id = ' + self.parsedObj.id);
+                self.reset();
+                return({status: self.constants.STATUS_ERROR});
+              }
+              // got a good full packet!  Pass it to payload parser
+              self.parsedObj.status = self.constants.STATUS_SUCCESS;
+              self.parsedObj.device = self.parsePayload(self.parsedObj.id, self.parsedObj.payload, self.p);
+              return(self.parsedObj);
+            }
+            else // something went awry
+            {
+              logger.warn('BRIDGE: Something went wrong with total CRC; possible id = ' + self.parsedObj.id);
+              self.reset();
+              return({status: self.constants.STATUS_ERROR});            }
+          }
+          self.reset();
+          return({});        }
+      }
+      idx++; // advance buffer
+    }
+    if (self.parsedObj.status == self.constants.STATUS_MOREDATA)
+    {
+      return({status: self.constants.STATUS_MOREDATA});
+    }
+    return({});
+  };
 
   // Encode PRO4 request and calculate checksum
   encode(sync, id, flags, csrAddress, len, payload)
@@ -265,7 +630,7 @@ class Pro4
         chksum ^= buf[i];
       }
       buf.writeUInt8(chksum, this.constants.PROTOCOL_PRO4_HEADER_SIZE);
-      logger.debug('DEBUG: My crc8 total = ' + chksum.toString(16));; 
+      logger.debug('DEBUG: My crc8 total = ' + chksum.toString(16));;
     }
 
     payload.copy(buf, headerLen);
@@ -285,116 +650,12 @@ class Pro4
 
     logger.warn('BRIDGE: Debug PRO4 request = ' + buf.toString('hex'));
     return buf;
-  }
+  };
 
-  // Parse PRO4 response header and validate checksum
-  decodeHead(data)
-  {
-    let self = this;
-    let retVal;
-    // parsed objects are big endian
-    let obj = self.ParserHead.parse(data);
-    let chksum = 0;
-    let padding = 1;
-    obj.status = this.constants.STATUS_SUCCESS;  // communicate parser status to state machine
-
-    if (obj.sync === self.constants.SYNC_RESPONSE32BE) {
-      padding = 4;
-    }
-    
-    let headerLen = this.constants.PROTOCOL_PRO4_HEADER_SIZE + padding;
-    let payloadLen = data.length - headerLen - padding;
-    
-    // validate header CRC
-    if (obj.sync == self.constants.SYNC_RESPONSE32BE) {
-      if (obj.crcType.crc32.headerCrc !== CRC.crc32(data.slice(0,6))) {
-        obj.status = this.constants.STATUS_ERROR;
-        logger.warn('BRIDGE: Bad header crc; possible id = ' + obj.id);
-      }
-    }
-    if (obj.sync == this.constants.SYNC_RESPONSE8BE) {
-      // calc 1-byte checksum
-      chksum = data[0] ^ data[1];
-      for (let i = 2; i < self.constants.PROTOCOL_PRO4_HEADER_SIZE; i++) {
-        chksum ^= data[i];
-      }
-      if (obj.crcType.crc8.headerCrc !== chksum) {
-        obj.status = this.constants.STATUS_ERROR;
-        logger.warn('BRIDGE: Bad header crc; possible id = ' + obj.id);
-      }   
-    }
-    return obj;
-  }
-
-  decodeBody(obj, data)
-  {
-    let self = this;
-    let retVal;
-    let chksum = 0;
-    let padding = 1;
-    
-    obj.status = this.constants.STATUS_SUCCESS;
-
-    if (obj.sync === self.constants.SYNC_RESPONSE32BE) {
-      padding = 4;
-    }
-    
-    let headerLen = this.constants.PROTOCOL_PRO4_HEADER_SIZE + padding;
-    let payloadLen = data.length - headerLen - padding;
-
-    // validate total CRC
-    if (obj.sync == this.constants.SYNC_RESPONSE32BE) {
-      if (obj.crcType.crc32.headerCrc !== CRC.crc32(data.slice(headerLen,data.length-padding))) {
-        obj.status = this.constants.STATUS_ERROR;
-        logger.warn('BRIDGE: Bad total crc; possible id = ' + obj.id);
-      }
-    }
-    if (obj.sync == this.constants.SYNC_RESPONSE8BE) {
-      // calc 1-byte checksum
-      chksum = data[7] ^ data[8];
-      for (let i = 9; i < data.length-padding; i++) {
-        chksum ^= data[i];
-      }
-      if (obj.crcType.crc8.headerCrc !== chksum) {
-        obj.status = this.constants.STATUS_ERROR;
-        logger.warn('BRIDGE: Bad total crc; possible id = ' + obj.id);
-      }
-    }
-
-    if (obj.status == this.constants.STATUS_SUCCESS) {
-      // extract payload and send to parser
-      // add to retVal object property
-      let begin = 0;
-      if (obj.sync == self.constants.SYNC_RESPONSE32LE) {
-        begin = data.length - padding - obj.payloadLength;
-      }
-      if (obj.sync == self.constants.SYNC_RESPONSE8LE) {
-        begin = data.length - padding - obj.payloadLength;
-      }
-      let end = data.length - padding;
-      let payload = data.slice(begin, end);
-      // now parse payload based on device ID
-      // obj.type used by browser telemetry plugin
-      if (obj.id >= 11 && obj.id <= 17) {
-        obj.type = 'thruster';
-        obj.payload = self.ParserMotors.parse(payload);        
-      }
-      else if (obj.id >= 61 && obj.id <= 64) {
-        obj.type = 'lights';
-        obj.payload = self.ParserLights.parse(payload);        
-      }
-      else if ((obj.id >= 0x31 && obj.id <= 0x34) || 
-               (obj.id >= 0x41 && obj.id <= 0x44)) {
-        obj.type = 'crumb';
-        obj.payload = self.ParserBam.parse(payload);        
-      }
-    }
-
-    return obj;
-  }
-}
+} // end class Pro4
 
 module.exports = {
   Pro4: Pro4,
-  constants: constants
+  constants: constants,
+  logger: logger
 }
