@@ -161,32 +161,31 @@ class Bridge extends EventEmitter
     this.gripperControl = {
       time:             0,
       timeDelta_ms:     0,
-      updateInterval:   250,  // loop interval in ms
-      state:            0,    // 0 (stop), 2 (close), 3 (open)
+      updateInterval:   500,  // loop interval in ms
+      state:            0,     // 0 (stop), 2 (close), 3 (open)
       grippers:         [
         {
-          name:         "Gripper 1 - unused",
-          nodeId:       97,   // PRO4 packet ID
-          state:        0
+          name:         "Gripper 1",
+          nodeId:       0x61,  // PRO4 packet ID
+          state:        0      // 0 (stop), 2 (close), 3 (open)
         },
         {
-          name:         "Gripper 2 - unused",
-          nodeId:       98,   // PRO4 packet ID
-          state:        0
+          name:         "Gripper 2 - water sampler",
+          nodeId:       0x62,   // PRO4 packet ID
+          state:        0       // 0 (stop), 2 (close), 3 (open)
         },
         {
-          name:         "Gripper 3 - unused",
-          nodeId:       99,   // PRO4 packet ID
-          motorId:      0,    // device protocol ID, position in PRO4 payload
-          value:        0     // thrust value (-1 to +1)
+          name:         "Gripper 3 - trim",
+          nodeId:       0x63,  // PRO4 packet ID
+          state:        0      // 0 (stop), 2 (close), 3 (open)
         }
       ],
       pro4:             {
         pro4Sync:       pro4.constants.SYNC_REQUEST8LE,
-        pro4Addresses:  [99], // XXX - set these correctly
-        flags:          2,    // defined by VideoRay
-        csrAddress:     0,    // custom command address
-        len:            6
+        pro4Addresses:  [0x61, 0x62, 0x63], // all updated at same time
+        flags:          0x80,  // defined by VideoRay
+        csrAddress:     0,     // custom command address
+        len:            1      // command payload is just a single byte
       }
     }
 
@@ -279,8 +278,8 @@ class Bridge extends EventEmitter
     self.lightsInterval = setInterval( function() { return self.updateLights(); },       self.vehicleLights.updateInterval );
     self.motorInterval = setInterval( function() { return self.updateMotors(); },     self.motorControl.updateInterval );
     self.rotateMotorInterval = setInterval( function() { return self.rotateMotor(); },     self.motorControl.rotateInterval );
-    // XXX - grippers unused at the moment, left in case need to change
-    //   self.gripperInterval = setInterval( function() { return self.updateGrippers(); },     self.gripperControl.updateInterval );
+    // XXX - gripper control in draft status - uncomment following line to test gripper control
+    //self.gripperInterval = setInterval( function() { return self.updateGrippers(); },     self.gripperControl.updateInterval );
 
 
     // Connect to MQTT broker and setup all event handlers
@@ -339,12 +338,12 @@ class Bridge extends EventEmitter
             {
               for (let i = 0; i < parsedObj.device[prop].length; i++)
               {
-                self.emitStatus(parsedObj.type, '.', parsedObj.id, '.', prop, '.', i, ':', parsedObj.device[prop]);;
+                self.emitStatus(`${parsedObj.type}.${prop}.${parsedObj.id}.${i}:${parsedObj.device[prop]}`);
               }
             }
             else
             {
-              self.emitStatus(parsedObj.type, '.', parsedObj.id, '.', prop, ':', parsedObj.device[prop]);;
+              self.emitStatus(`${parsedObj.type}.${prop}.${parsedObj.id}:${parsedObj.device[prop]}`);
             }
           }
         }
@@ -403,7 +402,6 @@ class Bridge extends EventEmitter
         });
         self.jobs[clientId].on('timeout', function (next, job) {
           logger.debug('BRIDGE: sendToMqtt() from clientId ', clientId, 'timed out; resetting parser state machine');
-          self.parser.reset();
           next();
         });
         self.jobs[clientId].on('end', function () {
@@ -431,7 +429,7 @@ class Bridge extends EventEmitter
   {
     let self = this;
 
-    logger.debug('Received bridge close().  Closing MQTT broker connection and removing status update intervals.');
+    logger.debug('BRIDGE: Received bridge close().  Closing MQTT broker connection and removing status update intervals.');
 
     // Remove status interval functions
     clearInterval( self.sensorInterval );
@@ -707,19 +705,22 @@ class Bridge extends EventEmitter
 
       case 'gripper_open':
       {
-        self.emitStatus('gripper.gripper_open:' + parameters[0]);
+        self.gripperControl.state = 2;
+        self.emitStatus(`gripper.gripper_open:${parameters[0]}`);
         break;
       }
 
       case 'gripper_close':
       {
-        self.emitStatus('gripper.gripper_close:' + parameters[0]);
+        self.gripperControl.state = 3;
+        self.emitStatus(`gripper.gripper_close:${parameters[0]}`);
         break;
       }
 
       case 'gripper_stationary':
       {
-        self.emitStatus('gripper.gripper_stationary:' + parameters[0]);
+        self.gripperControl.state = 0;
+        self.emitStatus(`gripper.gripper_stationary:${parameters[0]}`);
         break;
       }
 
@@ -1058,6 +1059,7 @@ class Bridge extends EventEmitter
   sendToMqtt ( clientId, packetBuf )
   {
     let self = this;
+    self.parser.reset(); // reset state machine
     if( self.mqttConnected )
     {
       self.client.publish('toScini/' + clientId, packetBuf);
@@ -1072,28 +1074,36 @@ class Bridge extends EventEmitter
     }
   }
 
-  parseStatus( rawStatus )
+  parseStatus(rawStatus)
   {
-    let parts   = rawStatus.trim().split( ':' );
+    let parts = rawStatus.trim().split(';');
     let status = {};
-
-    if( parts.length === 2 )
-    {
-      if( !isNaN( parts[ 1 ] ) )
+    for (let i = 0; i < parts.length; i++) {
+      let subParts = parts[i].split(':');
+      if (subParts.length === 2)
       {
-        status[ parts[ 0 ] ] = parts[ 1 ];
+        status[subParts[0]] = subParts[1];
+      }
+    }
+
+    /* do we need to care about NaNs in status output?
+    if(parts.length === 2)
+    {
+      if(!isNaN(parts[1]))
+      {
+        status[parts[0]] = parts[1];
       }
       else
       {
-        logger.debug( "NAN RESULT: " + parts[ 1 ] );
+        logger.debug("NAN RESULT:" + parts[1]);
       }
-    }
+    }*/
 
     return status;
   }
 
   // send data to telemetry plugin
-  emitStatus( status )
+  emitStatus(status)
   {
     let txtStatus = this.parseStatus(status);
     // hack for null status values being passed to handlers
@@ -1278,58 +1288,31 @@ class Bridge extends EventEmitter
 
   updateGrippers()
   {
-    // XXX - grippers not being used at the moment so this function is incomplete
+    // XXX - gripper control still in draft
     let self = this;
     let packetBuf;
 
     // Update time
     this.gripperControl.time += this.gripperControl.timeDelta_ms;
 
-    // Sent as first two bytes of payload
-    let payloadCmd = 0x4935;
-
-    // convert OpenROV target thrust to 32-bit LE floats and build payload
     let payload = new Buffer.allocUnsafe(this.gripperControl.pro4.len);
 
     // shorter names for easier reading
     let g = this.gripperControl.grippers;
     let p = this.gripperControl.pro4;
 
-    payload.writeUInt16LE(p.payloadCmd, 0);  // device command for motor control
-    payload.writeUInt8(g[0].state, 2);   // node ID of device to respond
-/*
-    if (p.pro4Addresses[0] & pro4.constants.ID_MULTICAST_FLAG) {
-      // build payload from motor state object
-      for (let i = 0; i < m.length; i++) {
-        payload.writeFloatLE(m[i].value, 2+4*i);
-      }
-      // first address in array is a multicast group
-      packetBuf = self.parser.encode(p.pro4Sync, p.pro4Addresses[0], p.flags, p.csrAddress, p.len, payload);
-      // maintain state by updating at least once per second
-      self.addToQueue(packetBuf);
-    }
-    else {
-      // first address in array is not multicast
-      // Generate new pro4 packet for each address and send to all motor modules
-      for (let i = 0; i < m.length; i++) {
-        (function() {
-          let j = i;  // loop closure
-          // Packet len = Header + 4-byte CRC + payload + 4-byte CRC = 27
-          packetBuf = self.parser.encode(p.pro4Sync, m[j].nodeId, p.flags, p.csrAddress, p.len, payload);
-          // maintain light state by updating at least once per second
-          self.addToQueue(packetBuf);
-        })();
-      }
-    }
-    payload.writeUInt8(m.motorId, 1);     // motor ID we want to respond. should rotate
+    payload.writeUInt8(g[0].state, 0);   // gripper command
 
-    let x, y;
-    for (x = 0; y <  m.length; x++) {
-      payload.writeFloatLE(thrust, 2);
+    // Generate new pro4 packet for each address and send to all
+    for (let i = 0; i < g.length; i++) {
+      (function() {
+        let j = i;  // loop closure
+        // Packet len = Header + 4-byte CRC + payload + 4-byte CRC = 27
+        packetBuf = self.parser.encode(p.pro4Sync, g[j].nodeId, p.flags, p.csrAddress, p.len, payload);
+        // maintain light state by updating at least once per second
+        self.addToQueue(packetBuf);
+      })();
     }
-    */
-    logger.debug('Received gripper command, not used.');
-
   }
 
   // send crumb644 sensor request
@@ -1363,7 +1346,7 @@ class Bridge extends EventEmitter
       })();
     }
 
-    logger.debug('Sent Crumb644 ' + type + ' request');
+    logger.debug('BRIDGE: Sent Crumb644 ' + type + ' request');
   }
 
   // Updates power supply values, IMU, depth sensors, etc. after request

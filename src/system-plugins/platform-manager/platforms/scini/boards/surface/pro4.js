@@ -142,6 +142,16 @@ class Pro4
       .floatle('temp')
       .uint8('fault');
 
+    // VideoRay PRO4 light module response payload
+    this.ParserGrippers = new Parser()
+      .uint8('cmd')
+      .uint8('cmd')
+      .uint16be('lim_i')
+      .uint16be('current')
+      .uint16be('temp')
+      .uint8('devAddress')
+      .uint32be('firmwareVersion');
+
     // SCINI crumb644 PRO4 response payload
     // Pre-IMU payload
     this.ParserBam44 = new Parser()
@@ -378,6 +388,21 @@ class Pro4
       {
         this.parsedObj.type = 'lights';
         return(this.ParserLights.parse(this.parsedObj.payload));
+      }
+      case 0x61:
+      {
+        this.parsedObj.type = 'gripper';
+        return(this.ParserGrippers.parse(this.parsedObj.payload));
+      }
+      case 0x62:
+      {
+        this.parsedObj.type = 'waterSampler';
+        return(this.ParserGrippers.parse(this.parsedObj.payload));
+      }
+      case 0x63:
+      {
+        this.parsedObj.type = 'trim';
+        return(this.ParserGrippers.parse(this.parsedObj.payload));
       }
       default:
       {
