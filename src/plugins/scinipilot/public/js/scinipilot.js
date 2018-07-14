@@ -1,4 +1,4 @@
-(function (window, $) 
+(function (window, $)
 {
   'use strict';
   class SCINIpilot
@@ -9,8 +9,8 @@
       var self = this;
 
       self.cockpit = cockpit;
-      
-      
+
+
       self.positions = {
         throttle: 0,
         yaw: 0,
@@ -34,7 +34,7 @@
       });
 
       //Input mappings
-      self.actions = 
+      self.actions =
       {
         'sciniPilot.strafeLeft':
         {
@@ -48,7 +48,7 @@
               },
               up: function() {
                 self.cockpit.emit('plugin.rovpilot.setStrafe', 0);
-              }           
+              }
             }
           }
         },
@@ -64,7 +64,7 @@
               },
               up: function() {
                 self.cockpit.emit('plugin.rovpilot.setStrafe', 0);
-              }           
+              }
             }
           }
         },
@@ -73,7 +73,7 @@
           description: "Command strafe with gamepad thumbsticks",
           controls:
           {
-            axis: 
+            axis:
             {
               update: function(value) {
                 self.cockpit.emit('plugin.rovpilot.setStrafe', value);
@@ -86,7 +86,7 @@
           description: "Command pitch (tilt) with gamepad thumbsticks",
           controls:
           {
-            axis: 
+            axis:
             {
               update: function(value) {
                 self.cockpit.emit('plugin.rovpilot.setPitch', value);
@@ -115,7 +115,7 @@
                                 enabled: false,
                                 rate: 1.0
                               }
-                            } 
+                            }
                           },
           "RIGHT_STICK_Y": { type: "axis",
                           action: 'sciniPilot.movePitch',
@@ -125,13 +125,13 @@
                               enabled: false,
                               rate: 1.0
                             }
-                          } 
+                          }
                         }
         }
       };
     };
-    
-    altMenuDefaults() 
+
+    altMenuDefaults()
     {
       var self = this;
       return [{
@@ -142,7 +142,32 @@
         }];
     };
 
-    listen() 
+    getTelemetryDefinitions()
+    {
+      return [
+      {
+        name: 'motors.rpm',
+        description: 'Thruster rpm'
+      },
+      {
+        name: 'motors.bus_v',
+        description: 'Thruster bus voltage'
+      },
+      {
+        name: 'motors.bus_i',
+        description: 'Thruster bus current'
+      },
+      {
+        name: 'motors.temp',
+        description: 'Thruster temperature'
+      },
+      {
+        name: 'motors.fault',
+        description: 'Thruster fault code'
+      }]
+    };
+
+    listen()
     {
       //As a general rule, we want to set a desired state before going over the
       //the wire to deliver control signals.  All kinds of problems from late arriving
@@ -161,7 +186,7 @@
       //Initial
       //Get the stick values
       self.cockpit.withHistory.on('settings-change.rovPilot', function (settings) {
-        
+
         //Init settings with defaults
         self.settings = settings.rovPilot;
       });
@@ -181,7 +206,7 @@
       });
     }
 
-    sendPilotingData() 
+    sendPilotingData()
     {
       var self = this;
       var positions = self.positions;

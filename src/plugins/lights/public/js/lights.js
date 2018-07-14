@@ -1,7 +1,7 @@
-(function(window) 
+(function(window)
 {
     'use strict';
-    class Lights 
+    class Lights
     {
         constructor( cockpit )
         {
@@ -16,7 +16,7 @@
             self.targetPower = 0.0;   // As requested by this plugin
 
             // Alternate representations of targetPower
-            self.currentStep = 0;     
+            self.currentStep = 0;
             self.isOn        = false;
 
             self.stepMap =
@@ -42,7 +42,7 @@
                         {
                             down: function() {
                                 cockpit.emit( 'plugin.lights.stepPositive' );
-                            }                            
+                            }
                         }
                     }
                 },
@@ -55,7 +55,7 @@
                         {
                             down: function() {
                                 cockpit.emit( 'plugin.lights.stepNegative' );
-                            }                            
+                            }
                         }
                     }
                 },
@@ -68,16 +68,16 @@
                         {
                             down: function() {
                                 cockpit.emit( 'plugin.lights.toggle' );
-                            }                            
+                            }
                         }
                     }
                 }
             };
 
             // Setup input handlers
-            this.inputDefaults = 
+            this.inputDefaults =
             {
-                keyboard: 
+                keyboard:
                 {
                     ".": { type: "button",
                            action: 'plugin.lights.stepPositive' },
@@ -86,7 +86,7 @@
                     "/": { type: "button",
                            action: 'plugin.lights.toggle' },
                 },
-                gamepad: 
+                gamepad:
                 {
                     "DPAD_RIGHT": { type: "button",
                            action: 'plugin.lights.stepPositive' },
@@ -96,7 +96,7 @@
                            action: 'plugin.lights.toggle' }
                 }
             };
-               
+
         };
 
         updateFromStep()
@@ -197,7 +197,7 @@
         }
 
         on()
-        {    
+        {
             // Update boolean rep
             this.isOn = true;
 
@@ -226,12 +226,32 @@
             {
                 name: 'lights.targetPower',
                 description: 'Requested light power as a percent'
+            },
+            {
+                name: 'lights.deviceType',
+                description: 'Light module PRO4 device type'
+            },
+            {
+                name: 'lights.bus_v',
+                description: 'Light bus voltage'
+            },
+            {
+                name: 'lights.bus_i',
+                description: 'Light bus current'
+            },
+            {
+                name: 'lights.temp',
+                description: 'Light power as a percent'
+            },
+            {
+                name: 'lights.fault',
+                description: 'Light fault code'
             }]
         };
 
         // This pattern will hook events in the cockpit and pull them all back
         // so that the reference to this instance is available for further processing
-        listen() 
+        listen()
         {
             var self = this;
 
@@ -245,9 +265,9 @@
             // Local Model currentPower
             this.cockpit.rov.withHistory.on('plugin.lights.currentPower', function( power )
             {
-                // Update 
+                // Update
                 self.currentPower = power;
-                
+
                 self.cockpit.emit( 'plugin.lights.currentPower', power );
             });
 
