@@ -49,7 +49,7 @@ let parser = new pro4.Pro4();
 let parseBuf = new Buffer.from('fddf4280f0687853434e4964020040223305003373cb436626ac4300809c4366667a4300000d42ffffff7f00c00c42ffffff7f0000fefffe0000ff0000ff00ff0042001822404ceeaf3f0000c07f0000c07f0079000000000000000000000000000000000000f1', 'hex');
 console.log(parser.parse(parseBuf));
 
-// should work
+// should work - light module, CRC32
 parser.reset();
 parseBuf = new Buffer.from('f00f3d02f00ec317c1d48300f23b4266e683be0000484208dff7fe56ff', 'hex');
 console.log(parser.parse(parseBuf));
@@ -58,3 +58,15 @@ console.log(parser.parse(parseBuf));
 parser.reset();
 parseBuf = new Buffer.from('fddf4280f0687853434e49640200000005000003fefd00fc00ff03feff003067001d66726f6d5363696e692f656c7068656c2d303030653634303831653165ffff7f00c00c42ffffff7f6842234268be384200c0234000d00e4000c0fd3f00b7404200e02340dff9ad3f0000c07f0000c07f0079000000000000000000000000000000000000c6', 'hex');
 console.log(parser.parse(parseBuf));
+
+/*// should xxx
+parser.reset();
+parseBuf = new Buffer.from('f00ff001c5711aa3f0000007f007d00000000000000000000000000000000000068', 'hex');
+console.log(parser.parse(parseBuf));
+*/
+
+// should work - BAM, CRC8
+parser.reset();
+parseBuf = new Buffer.from('fddf3180f0680b53434e496402004022330500ffffff7fffffff7fffffff7fffffff7fffffff7fffffff7fffffff7fffffff7f66f107c3669e00c30060b33f00a0b43f00a0aa3f00c06941ffebf440785e87400000c07f0000c07f007400000000000000000000000000000000000062', 'hex');
+console.log(parser.parse(parseBuf));
+

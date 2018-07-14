@@ -72,12 +72,6 @@ class Bridge extends EventEmitter
     this.results = {};
     // this object hold data and index for incoming MQTT messages
     this.clients = {}; // links clientId to their parserBuffer
-    this.fsm = {};  // links clientId to their state machine
-    // these are used by the parser - PRO4 response sync bytes
-    this.pro4sync8be = new Buffer.from('fddf', 'hex');
-    this.pro4sync8le = new Buffer.from('dffd', 'hex');
-    this.pro4sync32be = new Buffer.from('f00f', 'hex');
-    this.pro4sync32le = new Buffer.from('0ff0', 'hex');
     // *********** SCINI specific platform hardware request state *************
     this.sensors = {
       time:             0,
@@ -272,43 +266,7 @@ class Bridge extends EventEmitter
 
   }
 
-  createStateMachine()
-  {
-    let self = this;
 
-    return StateMachine.create({
-      // target: this.FSM.prototype, // XXX - recommended factory method, why?
-      initial: '_s_init',
-      events: [
-        { name: 'GetMoreHeaderData', from: '_s_init', to: '_s_pre_head' },
-        { name: 'ValidateHeader', from: ['_s_init', '_s_pre_head'], to: '_s_validate_head' },
-        { name: 'GetBody', from: '_s_validate_head', to: '_s_body' },
-        { name: 'ValidateBody', from: '_s_body', to: '_s_validate_body'  },
-        { name: 'ProcessPayload', from: '_s_validate_body', to: '_s_process_payload'  },
-        { name: 'StopParsing', from: '*', to: '_s_stop'  },
-        { name: 'WaitForNext', from: '_s_stop', to: '_s_wait' },
-        { name: 'ResetState', from: '*', to: '_s_init'    }
-      ],
-      callbacks: {
-        on_s_init:            self.fsmEnterHandler,
-        on_s_pre_head:        self.fsmEnterHandler,
-        on_s_validate_head:   self.fsmEnterHandler,
-        on_s_body:            self.fsmEnterHandler,
-        on_s_validate_body:   self.fsmEnterHandler,
-        on_s_process_payload: self.fsmEnterHandler,
-        on_s_stop:            self.fsmEnterHandler,
-        on_s_wait:            self.fsmEnterHandler
-      },
-      error: {
-
-      }
-    });
-  }
-
-  fsmEnterHandler(event, from, to)
-  {
-    logger.debug('BRIDGE: Parser moved from ' + from + ' to ' + to);
-  }
 
   connect()
   {
@@ -328,7 +286,7 @@ class Bridge extends EventEmitter
     // Connect to MQTT broker and setup all event handlers
     // Note that platform code is loaded before MQTT broker plugin, so the
     // client may attempt a few reconnects until it is successful
-    this.client = mqtt.connect(this.mqttUri, {
+    self.client = mqtt.connect(self.mqttUri, {
       protocolVersion: 4,
       resubscribe: true,
       will: {
@@ -339,29 +297,29 @@ class Bridge extends EventEmitter
       }
     });
 
-    this.client.on('connect', () => {
-      this.mqttConnected = true;
+    self.client.on('connect', () => {
+      self.mqttConnected = true;
       logger.debug('BRIDGE: MQTT broker connection established!');
       logger.debug('BRIDGE: Creating surface subscriptions.');
-      this.client.subscribe('status/+'); // receive all status topic messages
-      this.client.subscribe('thrusters/+'); // receive all motor control responses
-      this.client.subscribe('sensors/+'); // receive all sensor telemetry
-      this.client.subscribe('clump/+'); // receive all clump weight topics
-      this.client.subscribe('vehicle/+'); // receive all vechicle topics
-      this.client.subscribe('fromScini/#'); // receive all messages from the ROV
+      self.client.subscribe('status/+'); // receive all status topic messages
+      self.client.subscribe('thrusters/+'); // receive all motor control responses
+      self.client.subscribe('sensors/+'); // receive all sensor telemetry
+      self.client.subscribe('clump/+'); // receive all clump weight topics
+      self.client.subscribe('vehicle/+'); // receive all vechicle topics
+      self.client.subscribe('fromScini/#'); // receive all messages from the ROV
     });
 
-    this.client.on('reconnect', () => {
-      this.mqttConnected = true;
+    self.client.on('reconnect', () => {
+      self.mqttConnected = true;
       logger.debug('BRIDGE: MQTT broker re-connected!');
     });
 
-    this.client.on('offline', () => {
-      this.mqttConnected = false;
+    self.client.on('offline', () => {
+      self.mqttConnected = false;
       logger.debug('BRIDGE: MQTT broker connection offline!');
     });
 
-    this.client.on('message', (topic, message) => {
+    self.client.on('message', (topic, message) => {
       // message is a Buffer object, send to decoder
       logger.debug('BRIDGE: Received MQTT on topic ' + topic);
       logger.warn('BRIDGE: Raw MQTT message = ' + message.toString('hex'));
@@ -369,10 +327,26 @@ class Bridge extends EventEmitter
       let clientId = topic.split('/', 2)[1];
       // only send messages from elphel gateways to parser
       if (clientId.match('elphel-.*')) {
-        let parsedObj = this.parser.parse(message);
+        let parsedObj = self.parser.parse(message);
         if (parsedObj.status == pro4.constants.STATUS_SUCCESS)
         {
-          this.jobs[clientId].cb(); // advance queue
+          self.jobs[clientId].cb(); // advance queue
+
+          // send parsed device data to browser telemetry plugin
+          for (let prop in parsedObj.device)
+          {
+            if (typeof parsedObj.device[prop] == 'object')
+            {
+              for (let i = 0; i < parsedObj.device[prop].length; i++)
+              {
+                self.emitStatus(parsedObj.type, '.', parsedObj.id, '.', prop, '.', i, ':', parsedObj.device[prop]);;
+              }
+            }
+            else
+            {
+              self.emitStatus(parsedObj.type, '.', parsedObj.id, '.', prop, ':', parsedObj.device[prop]);;
+            }
+          }
         }
         else if (parsedObj.status == pro4.constants.STATUS_MOREDATA)
         {
@@ -381,7 +355,7 @@ class Bridge extends EventEmitter
         else if (parsedObj.status == pro4.constants.STATUS_ERROR)
         {
           logger.warn('BRIDGE: Error in PRO4 message parser; message = ', message.toString('hex'));
-          this.jobs[clientId].cb(); // advance queue
+          self.jobs[clientId].cb(); // advance queue
         }
         else // invalid status
         {
@@ -390,17 +364,17 @@ class Bridge extends EventEmitter
       }
     });
 
-    this.client.on('error', (err) => {
+    self.client.on('error', (err) => {
       logger.debug('BRIDGE: MQTT error: ', err);
     });
 
-    this.client.on('close', () => {
+    self.client.on('close', () => {
       // connection state is also set to false in class close() method
-      this.mqttConnected = false;
+      self.mqttConnected = false;
       logger.debug('BRIDGE: MQTT broker connection closed!');
     });
 
-    this.globalBus.on('plugin.mqttBroker.clientConnected', (clientId) => {
+    self.globalBus.on('plugin.mqttBroker.clientConnected', (clientId) => {
       logger.debug('BRIDGE: Received MQTT clientConnected() from ' + clientId);
       // create new message queue for each ROV MQTT gateway
       if (clientId.match('elphel.*')) {
@@ -409,47 +383,46 @@ class Bridge extends EventEmitter
         // max wait time for response = 20ms
         // autostart = always running if jobs are in queue
         // results = store
-        this.clients[clientId] = {};
-        this.clients[clientId].bufIdx = 0; // points to end of received data in parseBuffer
-        this.clients[clientId].parseIdx = 0; // points to current parser index
-        this.clients[clientId].parseBuffer = new Buffer.alloc(1024);
-        this.fsm[clientId] = self.createStateMachine();
-        this.results[clientId] = [];
-        this.jobs[clientId] = new q({
+        self.clients[clientId] = {};
+        self.clients[clientId].bufIdx = 0; // points to end of received data in parseBuffer
+        self.clients[clientId].parseIdx = 0; // points to current parser index
+        self.clients[clientId].parseBuffer = new Buffer.alloc(1024);
+        self.results[clientId] = [];
+        self.jobs[clientId] = new q({
                                       concurrency: 1,
-                                      timeout: 20,
+                                      timeout: 30,
                                       autostart: true,
-                                      results: this.results[clientId]
+                                      results: self.results[clientId]
                                     });
-        this.jobs[clientId].cb = function() {
+        self.jobs[clientId].cb = function() {
           // do nothing
-          return;
+          return true;
         }
-        this.jobs[clientId].on('error', function (err, job) {
+        self.jobs[clientId].on('error', function (err, job) {
           logger.error('BRIDGE: sendToMqtt() from clientId ', clientId, 'produced error: ', err);
         });
-        this.jobs[clientId].on('timeout', function (next, job) {
-          logger.debug('BRIDGE: sendToMqtt() from clientId ', clientId, 'timed out');
+        self.jobs[clientId].on('timeout', function (next, job) {
+          logger.debug('BRIDGE: sendToMqtt() from clientId ', clientId, 'timed out; resetting parser state machine');
+          //self.parser.reset();
           next();
         });
-        this.jobs[clientId].on('end', function () {
+        self.jobs[clientId].on('end', function () {
           logger.debug('BRIDGE: all jobs done for clientId ', clientId);
         });
       }
     });
-    this.globalBus.on('plugin.mqttBroker.clientDisconnected', (clientId) => {
+    self.globalBus.on('plugin.mqttBroker.clientDisconnected', (clientId) => {
       logger.debug('BRIDGE: Received MQTT clientDisconnected() from ' + clientId);
       // stop and empty queue
       if (typeof(clientId) != 'undefined') {
         if (clientId.match('elphel.*')) {
-          this.results[clientId] = [];
-          this.jobs[clientId].end();
+          self.results[clientId] = [];
+          self.jobs[clientId].end();
         }
       }
-      delete this.clients[clientId];
-      delete this.fsm[clientId];
+      delete self.clients[clientId];
     });
-    this.globalBus.on('plugin.mqttBroker.publishedByClientId', (client) => {
+    self.globalBus.on('plugin.mqttBroker.publishedByClientId', (client) => {
       logger.debug('BRIDGE: MQTT message published by client ' + client);
     });
   }
@@ -468,7 +441,7 @@ class Bridge extends EventEmitter
     // clearInterval( self.gripperInterval);
 
     self.client.end(false, () => {
-      logger.debug('BRIDGE: MQTT this.client.end() returned.');
+      logger.debug('BRIDGE: MQTT self.client.end() returned.');
       self.mqttConnected = false;
     });
 
@@ -476,8 +449,8 @@ class Bridge extends EventEmitter
     logger.debug('BRIDGE: Empty and stop MQTT client job queues');
     // stop and empty queue
     if (clientId.match('elphel.*')) {
-      this.results[clientId] = [];
-      this.jobs[clientId].end();
+      self.results[clientId] = [];
+      self.jobs[clientId].end();
     }
   }
 
@@ -492,16 +465,14 @@ class Bridge extends EventEmitter
     {
       case 'version':
       {
-        this.emitStatus('ver:<<{{10024121ae3fa7fc60a5945be1e155520fb929dd}}>>');
-        debug('ver:<<{{10024121ae3fa7fc60a5945be1e155520fb929dd}}>>');
-
+        self.emitStatus('ver:<<{{10024121ae3fa7fc60a5945be1e155520fb929dd}}>>');
+        logger.debug('ver:<<{{10024121ae3fa7fc60a5945be1e155520fb929dd}}>>');
         break;
       }
 
       case 'wake':
       {
-        this.emitStatus('awake:;');
-
+        self.emitStatus('awake:;');
         break;
       }
 
@@ -511,71 +482,67 @@ class Bridge extends EventEmitter
 
         if( helloGoodbye === 1 )
         {
-          this.emitStatus('example:Hello!;');
+          self.emitStatus('example:Hello!;');
         }
         else
         {
-          this.emitStatus('example:Goodbye!;');
+          self.emitStatus('example:Goodbye!;');
         }
-
         break;
       }
 
       case 'imu_mode':
       {
-         this.sensors.imu.mode = parseInt( parameters[0] );
-         this.emitStatus(`imu_mode:${this.sensors.imu.mode};`);
-
-         break;
+        self.sensors.imu.mode = parseInt( parameters[0] );
+        self.emitStatus(`imu_mode:${self.sensors.imu.mode};`);
+        break;
       }
 
       case 'imu_level':
       {
-          // Echo back requested settings
-          this.sensors.imu.rollOffset = this.decode( parseInt( parameters[0] ) );
-          this.emitStatus("imu_roff:" + this.encode( this.sensors.imu.rollOffset ) + ";" );
+        // Echo back requested settings
+        self.sensors.imu.rollOffset = self.decode( parseInt( parameters[0] ) );
+        self.emitStatus("imu_roff:" + self.encode( self.sensors.imu.rollOffset ) + ";" );
 
-          this.sensors.imu.pitchOffset = this.decode( parseInt( parameters[1] ) );
-          this.emitStatus("imu_poff:" + this.encode( this.sensors.imu.pitchOffset ) + ";" );
-
-          break;
+        self.sensors.imu.pitchOffset = self.decode( parseInt( parameters[1] ) );
+        self.emitStatus("imu_poff:" + self.encode( self.sensors.imu.pitchOffset ) + ";" );
+        break;
       }
 
       case 'imu_zyaw':
       {
-          // Set the current heading as the offset
-          this.sensors.imu.yawOffset = this.sensors.imu.yaw;
-          this.emitStatus(`imu_zyaw:ack;`);
-
-          break;
+        // Set the current heading as the offset
+        self.sensors.imu.yawOffset = self.sensors.imu.yaw;
+        self.emitStatus(`imu_zyaw:ack;`);
+        break;
       }
 
       case 'depth_zero':
       {
-          // Set the current depth as the offset
-          this.sensors.depth.depthOffset = this.sensors.depth.depth;
-          this.emitStatus(`depth_zero:ack;`);
-          break;
+        // Set the current depth as the offset
+        self.sensors.depth.depthOffset = self.sensors.depth.depth;
+        self.emitStatus(`depth_zero:ack;`);
+        break;
       }
 
       case 'depth_clroff':
       {
-          // Set the depth offset to 0
-          this.sensors.depth.depthOffset = 0;
-          this.emitStatus(`depth_clroff:ack;`);
-          break;
+        // Set the depth offset to 0
+        self.sensors.depth.depthOffset = 0;
+        self.emitStatus(`depth_clroff:ack;`);
+        break;
       }
 
       case 'depth_water':
       {
-          this.sensors.depth.waterType = parseInt( parameters[0] );
-          this.emitStatus(`depth_water:${this.sensors.depth.waterType};`);
-          break;
+        self.sensors.depth.waterType = parseInt( parameters[0] );
+        self.emitStatus(`depth_water:${self.sensors.depth.waterType};`);
+        break;
       }
 
       case 'ping':
       {
-        this.emitStatus(`pong:${parameters[0]}`);
+        self.emitStatus(`pong:${parameters[0]}`);
         logger.trace(`pong:${parameters[0]}`);
         break;
       }
@@ -587,8 +554,9 @@ class Bridge extends EventEmitter
         power = Math.max(power, 0);
         power = Math.min(power, 1.0);
 
-	// Ack command
-	this.emitStatus('lights_tpow:' + parameters[0] );
+	      // Ack command
+        self.emitStatus('lights_tpow:' + parameters[0] );
+        self.emitStatus('lights.currentPower:' + parameters[0] );
 
         // Update state object to be sent on next packet interval
         self.vehicleLights.power = power;
@@ -613,7 +581,7 @@ class Bridge extends EventEmitter
         power = Math.min(power, 1.0);
 
         // Ack command
-        this.emitStatus('elights_tpow:' + power );
+        self.emitStatus('elights_tpow:' + power );
 
         // Update state object to be sent on next packet interval
         self.clumpLights.power = power;
@@ -635,7 +603,7 @@ class Bridge extends EventEmitter
         // Ack command
 
         let pos = parseInt( parameters[0] );
-        this.emitStatus('camServ_tpos:' + pos );
+        self.emitStatus('camServ_tpos:' + pos );
 
         setTimeout( function()
         {
@@ -649,7 +617,7 @@ class Bridge extends EventEmitter
       case 'camServ_inv':
       {
         // Ack command
-        this.emitStatus('camServ_inv:' + parameters[0] );
+        self.emitStatus('camServ_inv:' + parameters[0] );
         break;
       }
 
@@ -657,36 +625,36 @@ class Bridge extends EventEmitter
       {
         // Ack command
         let speed = parseInt( parameters[0] );
-        this.emitStatus('camServ_spd:' + speed );
+        self.emitStatus('camServ_spd:' + speed );
         break;
       }
 
       case 'eligt':
       {
-        this.emitStatus('LIGPE:' + parameters[0] / 100);
+        self.emitStatus('LIGPE:' + parameters[0] / 100);
         logger.debug('External light status: ' + parameters[0] / 100);
         break;
       }
 
       case 'escp':
       {
-        this.emitStatus('ESCP:' + parameters[0]);
+        self.emitStatus('ESCP:' + parameters[0]);
         logger.debug('ESC status: ' + parameters[0]);
         break;
       }
 
       case 'claser':
       {
-        if (this.laserEnabled)
+        if (self.laserEnabled)
         {
-          this.laserEnabled = false;
-          this.emitStatus('claser:0');
+          self.laserEnabled = false;
+          self.emitStatus('claser:0');
           logger.debug('Laser status: 0');
         }
         else
         {
-          this.laserEnabled = true;
-          this.emitStatus('claser:255');
+          self.laserEnabled = true;
+          self.emitStatus('claser:255');
           logger.debug('Laser status: 255');
         }
 
@@ -697,13 +665,13 @@ class Bridge extends EventEmitter
       {
         let targetDepth = 0;
 
-        if (!this.depthHoldEnabled)
+        if (!self.depthHoldEnabled)
         {
-          targetDepth = this.sensors.depth.depth;
-          this.depthHoldEnabled = true;
+          targetDepth = self.sensors.depth.depth;
+          self.depthHoldEnabled = true;
         }
 
-        this.emitStatus('targetDepth:' + (this.depthHoldEnabled ? targetDepth.toString() : this.DISABLED));
+        self.emitStatus('targetDepth:' + (self.depthHoldEnabled ? targetDepth.toString() : self.DISABLED));
         logger.debug('Depth hold enabled');
         break;
       }
@@ -711,8 +679,8 @@ class Bridge extends EventEmitter
       case 'holdDepth_off':
       {
         let targetDepth = -500;
-        this.depthHoldEnabled = false;
-        this.emitStatus('targetDepth:' + (this.depthHoldEnabled ? targetDepth.toString() : this.DISABLED));
+        self.depthHoldEnabled = false;
+        self.emitStatus('targetDepth:' + (self.depthHoldEnabled ? targetDepth.toString() : self.DISABLED));
         logger.debug('Depth hold disabled');
         break;
       }
@@ -720,9 +688,9 @@ class Bridge extends EventEmitter
       case 'holdHeading_on':
       {
         let targetHeading = 0;
-        targetHeading = this.sensors.imu.yaw;
-        this.targetHoldEnabled = true;
-        this.emitStatus('targetHeading:' + (this.targetHoldEnabled ? targetHeading.toString() : this.DISABLED));
+        targetHeading = self.sensors.imu.yaw;
+        self.targetHoldEnabled = true;
+        self.emitStatus('targetHeading:' + (self.targetHoldEnabled ? targetHeading.toString() : self.DISABLED));
         logger.debug('Heading hold enabled');
         break;
       }
@@ -731,27 +699,27 @@ class Bridge extends EventEmitter
       {
         let targetHeading = 0;
         targetHeading = -500;
-        this.targetHoldEnabled = false;
-        this.emitStatus('targetHeading:' + (this.targetHoldEnabled ? targetHeading.toString() : this.DISABLED));
+        self.targetHoldEnabled = false;
+        self.emitStatus('targetHeading:' + (self.targetHoldEnabled ? targetHeading.toString() : self.DISABLED));
         logger.debug('Heading hold disabled');
         break;
       }
 
       case 'gripper_open':
       {
-        this.emitStatus('gripper.gripper_open:' + parameters[0]);
+        self.emitStatus('gripper.gripper_open:' + parameters[0]);
         break;
       }
 
       case 'gripper_close':
       {
-        this.emitStatus('gripper.gripper_close:' + parameters[0]);
+        self.emitStatus('gripper.gripper_close:' + parameters[0]);
         break;
       }
 
       case 'gripper_stationary':
       {
-        this.emitStatus('gripper.gripper_stationary:' + parameters[0]);
+        self.emitStatus('gripper.gripper_stationary:' + parameters[0]);
         break;
       }
 
@@ -762,47 +730,47 @@ class Bridge extends EventEmitter
         // thruster, vertical, starboard, aftvertical, aftstarboard
         // Ack command (ex: mtrmod1(100,100,-100,100,-100));
         if (parameters[0] < 0) {
-          this.motorControl.motors[0].reverse = true;
-          this.motorControl.motors[0].fwdMod = parameters[0] * 0.01;
+          self.motorControl.motors[0].reverse = true;
+          self.motorControl.motors[0].fwdMod = parameters[0] * 0.01;
         }
         else {
-          this.motorControl.motors[0].reverse = false;
-          this.motorControl.motors[0].fwdMod = parameters[0] * 0.01;
+          self.motorControl.motors[0].reverse = false;
+          self.motorControl.motors[0].fwdMod = parameters[0] * 0.01;
         }
         if (parameters[1] < 0) {
-          this.motorControl.motors[4].reverse = true;
-          this.motorControl.motors[4].fwdMod = parameters[1] * 0.01;
+          self.motorControl.motors[4].reverse = true;
+          self.motorControl.motors[4].fwdMod = parameters[1] * 0.01;
         }
         else {
-          this.motorControl.motors[4].reverse = false;
-          this.motorControl.motors[4].fwdMod = parameters[1] * 0.01;
+          self.motorControl.motors[4].reverse = false;
+          self.motorControl.motors[4].fwdMod = parameters[1] * 0.01;
         }
         if (parameters[2] < 0) {
-          this.motorControl.motors[3].reverse = true;
-          this.motorControl.motors[3].fwdMod = parameters[2] * 0.01;
+          self.motorControl.motors[3].reverse = true;
+          self.motorControl.motors[3].fwdMod = parameters[2] * 0.01;
         }
         else {
-          this.motorControl.motors[3].reverse = false;
-          this.motorControl.motors[3].fwdMod = parameters[2] * 0.01;
+          self.motorControl.motors[3].reverse = false;
+          self.motorControl.motors[3].fwdMod = parameters[2] * 0.01;
         }
         if (parameters[3] < 0) {
-          this.motorControl.motors[2].reverse = true;
-          this.motorControl.motors[2].fwdMod = parameters[3] * 0.01;
+          self.motorControl.motors[2].reverse = true;
+          self.motorControl.motors[2].fwdMod = parameters[3] * 0.01;
         }
         else {
-          this.motorControl.motors[2].reverse = false;
-          this.motorControl.motors[2].fwdMod = parameters[3] * 0.01;
+          self.motorControl.motors[2].reverse = false;
+          self.motorControl.motors[2].fwdMod = parameters[3] * 0.01;
         }
         if (parameters[4] < 0) {
-          this.motorControl.motors[1].reverse = true;
-          this.motorControl.motors[1].fwdMod = parameters[4] * 0.01;
+          self.motorControl.motors[1].reverse = true;
+          self.motorControl.motors[1].fwdMod = parameters[4] * 0.01;
         }
         else {
-          this.motorControl.motors[1].reverse = false;
-          this.motorControl.motors[1].fwdMod = parameters[4] * 0.01;
+          self.motorControl.motors[1].reverse = false;
+          self.motorControl.motors[1].fwdMod = parameters[4] * 0.01;
         }
 
-        this.emitStatus('motors.mtrmod1:' + parameters );
+        self.emitStatus('motors.mtrmod1:' + parameters );
         break;
       }
 
@@ -811,37 +779,37 @@ class Bridge extends EventEmitter
       {
         // Ack command (ex: mtrmod2(200,200,-200,200,-200));
         if (parameters[0] < 0) {
-          this.motorControl.motors[0].revMod = parameters[0] * 0.01;
+          self.motorControl.motors[0].revMod = parameters[0] * 0.01;
         }
         else {
-          this.motorControl.motors[0].revMod = parameters[0] * 0.01;
+          self.motorControl.motors[0].revMod = parameters[0] * 0.01;
         }
         if (parameters[1] < 0) {
-          this.motorControl.motors[4].revMod = parameters[1] * 0.01;
+          self.motorControl.motors[4].revMod = parameters[1] * 0.01;
         }
         else {
-          this.motorControl.motors[4].revMod = parameters[1] * 0.01;
+          self.motorControl.motors[4].revMod = parameters[1] * 0.01;
         }
         if (parameters[2] < 0) {
-          this.motorControl.motors[3].revMod = parameters[2] * 0.01;
+          self.motorControl.motors[3].revMod = parameters[2] * 0.01;
         }
         else {
-          this.motorControl.motors[3].revMod = parameters[2] * 0.01;
+          self.motorControl.motors[3].revMod = parameters[2] * 0.01;
         }
         if (parameters[3] < 0) {
-          this.motorControl.motors[2].revMod = parameters[3] * 0.01;
+          self.motorControl.motors[2].revMod = parameters[3] * 0.01;
         }
         else {
-          this.motorControl.motors[2].revMod = parameters[3] * 0.01;
+          self.motorControl.motors[2].revMod = parameters[3] * 0.01;
         }
         if (parameters[4] < 0) {
-          this.motorControl.motors[1].revMod = parameters[4] * 0.01;
+          self.motorControl.motors[1].revMod = parameters[4] * 0.01;
         }
         else {
-          this.motorControl.motors[1].revMod = parameters[4] * 0.01;
+          self.motorControl.motors[1].revMod = parameters[4] * 0.01;
         }
 
-        this.emitStatus('motors.mtrmod2:' + parameters );
+        self.emitStatus('motors.mtrmod2:' + parameters );
         break;
       }
 
@@ -1074,7 +1042,7 @@ class Bridge extends EventEmitter
     }
 
     // Echo this command back to the MCU
-    this.emitStatus('cmd:' + command);
+    self.emitStatus('cmd:' + command);
   }
 
   addToQueue ( packetBuf )

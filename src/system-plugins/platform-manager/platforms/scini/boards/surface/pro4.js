@@ -122,7 +122,8 @@ class Pro4
       payload: 0,
       crcTotal: 0,
       device: {},
-      status: 0
+      status: 0,
+      type: ''
     };
 
     // VideoRay PRO4 thruster response payload
@@ -222,7 +223,7 @@ class Pro4
 
   fsmEnterHandler(event, from, to)
   {
-    logger.debug('BRIDGE: Parser moved from ' + from + ' to ' + to);
+    logger.debug('PRO4: Parser moved from ' + from + ' to ' + to);
   };
 
   createStateMachine()
@@ -272,7 +273,8 @@ class Pro4
       payload: 0,
       crcTotal: 0,
       device: {},
-      status: 0
+      status: 0,
+      type: ''
     };
     self.fsm.ResetState();
   }
@@ -283,79 +285,104 @@ class Pro4
     {
       case 11:
       {
+        this.parsedObj.type = 'motors';
         return(this.ParserMotors.parse(this.parsedObj.payload));
       }
       case 12:
       {
+        this.parsedObj.type = 'motors';
         return(this.ParserMotors.parse(this.parsedObj.payload));
       }
       case 13:
       {
+        this.parsedObj.type = 'motors';
         return(this.ParserMotors.parse(this.parsedObj.payload));
       }
       case 14:
       {
+        this.parsedObj.type = 'motors';
         return(this.ParserMotors.parse(this.parsedObj.payload));
       }
       case 15:
       {
+        this.parsedObj.type = 'motors';
         return(this.ParserMotors.parse(this.parsedObj.payload));
       }
       case 16:
       {
+        this.parsedObj.type = 'motors';
         return(this.ParserMotors.parse(this.parsedObj.payload));
       }
       case 17:
       {
+        this.parsedObj.type = 'motors';
         return(this.ParserMotors.parse(this.parsedObj.payload));
       }
-      case 31:
+      case 0x31:
       {
-        return(this.ParserBam44.parse(this.parsedObj.payload));
+        this.parsedObj.type = 'sensors';
+        console.log(this.ParserBam.parse(this.parsedObj.payload));
+        return(this.ParserBam.parse(this.parsedObj.payload));
       }
-      case 32:
+      case 0x32:
       {
-        return(this.ParserBam44.parse(this.parsedObj.payload));
+        this.parsedObj.type = 'sensors';
+        return(this.ParserBam.parse(this.parsedObj.payload));
       }
-      case 33:
+      case 0x33:
       {
-        return(this.ParserBam44.parse(this.parsedObj.payload));
+        this.parsedObj.type = 'sensors';
+        return(this.ParserBam.parse(this.parsedObj.payload));
       }
-      case 34:
+      case 0x34:
       {
-        return(this.ParserBam44.parse(this.parsedObj.payload));
+        this.parsedObj.type = 'sensors';
+        return(this.ParserBam.parse(this.parsedObj.payload));
       }
-      case 41:
+      case 0x41:
       {
-        return(this.ParserBam44.parse(this.parsedObj.payload));
+        this.parsedObj.type = 'sensors';
+        return(this.ParserBam.parse(this.parsedObj.payload));
       }
-      case 42:
+      case 0x42:
       {
-        return(this.ParserBam44.parse(this.parsedObj.payload));
+        this.parsedObj.type = 'sensors';
+        return(this.ParserBam.parse(this.parsedObj.payload));
       }
-      case 43:
+      case 0x43:
       {
-        return(this.ParserBam44.parse(this.parsedObj.payload));
+        this.parsedObj.type = 'sensors';
+        return(this.ParserBam.parse(this.parsedObj.payload));
       }
-      case 44:
+      case 0x44:
       {
-        return(this.ParserBam44.parse(this.parsedObj.payload));
+        this.parsedObj.type = 'sensors';
+        return(this.ParserBam.parse(this.parsedObj.payload));
       }
       case 61:
       {
+        this.parsedObj.type = 'lights';
         return(this.ParserLights.parse(this.parsedObj.payload));
       }
       case 62:
       {
+        this.parsedObj.type = 'lights';
         return(this.ParserLights.parse(this.parsedObj.payload));
       }
       case 63:
       {
+        this.parsedObj.type = 'lights';
         return(this.ParserLights.parse(this.parsedObj.payload));
       }
       case 64:
       {
+        this.parsedObj.type = 'lights';
         return(this.ParserLights.parse(this.parsedObj.payload));
+      }
+      default:
+      {
+        this.parsedObj.type = 'notFound';
+        return({});
       }
     }
   }
@@ -379,7 +406,7 @@ class Pro4
           }
           else
           {
-            logger.debug('Invalid PRO4 response at byte = ', buf[idx], 'state = ', self.fsm.current);
+            logger.debug('PRO4: Invalid PRO4 response at byte = ', buf[idx], 'state = ', self.fsm.current);
             self.reset();
             return({status: self.constants.STATUS_ERROR});
           }
@@ -396,7 +423,7 @@ class Pro4
           }
           else
           {
-            logger.debug('Invalid PRO4 response at byte = ', buf[idx], 'state = ', self.fsm.current);
+            logger.debug('PRO4: Invalid PRO4 response at byte = ', buf[idx], 'state = ', self.fsm.current);
             self.reset();
             return({status: self.constants.STATUS_ERROR});
           }
@@ -413,7 +440,7 @@ class Pro4
           }
           else
           {
-            logger.debug('Invalid PRO4 response device ID = ', buf[idx]);
+            logger.debug('PRO4: Invalid PRO4 response device ID = ', buf[idx]);
             self.reset();
             return({status: self.constants.STATUS_ERROR});
           }
@@ -435,8 +462,17 @@ class Pro4
         }
         case '_s_payloadLen':
         {
-          self.parsedObj.payloadLen = buf[idx];
-          self.headBuf[5] = buf[idx];
+          if (buf[idx] < 255) // we don't support extended length PRO4 packets yet
+          {
+            self.parsedObj.payloadLen = buf[idx];
+            self.headBuf[5] = buf[idx];
+          }
+          else
+          {
+            logger.warn('PRO4: Received 255 as payload length but we don\'t support extended length packets; Dropping)');
+            self.reset();
+            return({status: self.constants.STATUS_ERROR});
+          }
           self.fsm.GetCrcHead();
           break;
         }
@@ -450,7 +486,7 @@ class Pro4
 
             if (buf[idx] != chksum)
             {
-              logger.warn('BRIDGE: Bad header CRC; possible id = ' + self.parsedObj.id);
+              logger.warn('PRO4: Bad header CRC; possible id = ' + self.parsedObj.id);
               self.reset();
               return({status: self.constants.STATUS_ERROR});
             }
@@ -479,7 +515,7 @@ class Pro4
               let calcdChksum = CRC.crc32(self.headBuf); // calculate checksum of received data
               if (calcdChksum != self.parsedObj.crcHead.readUInt32LE(0))
               {
-                logger.warn('BRIDGE: Bad header CRC32; possible id = ' + self.parsedObj.id);
+                logger.warn('PRO4: Bad header CRC32; possible id = ' + self.parsedObj.id);
                 self.reset();
                 return({status: self.constants.STATUS_ERROR});
               }
@@ -488,7 +524,7 @@ class Pro4
             }
             else // something went awry
             {
-              logger.warn('BRIDGE: Something went wrong with header CRC32; possible id = ' + self.parsedObj.id);
+              logger.warn('PRO4: Something went wrong with header CRC32; possible id = ' + self.parsedObj.id);
               self.reset();
               return({status: self.constants.STATUS_ERROR});
             }
@@ -518,7 +554,7 @@ class Pro4
           }
           else // something went awry
           {
-            logger.warn('BRIDGE: Something went wrong with payload parsing; possible id = ' + self.parsedObj.id);
+            logger.warn('PRO4: Something went wrong with payload parsing; possible id = ' + self.parsedObj.id);
             self.reset();
             return({status: self.constants.STATUS_ERROR});
           }
@@ -535,17 +571,17 @@ class Pro4
             }
             if (buf[idx] != chksum)
             {
-              logger.warn('BRIDGE: Bad total CRC; ', chksum, 'vs ', buf[idx], '; possible id = ' + self.parsedObj.id);
+              logger.warn('PRO4: Bad total CRC; ', chksum, 'vs ', buf[idx], '; possible id = ' + self.parsedObj.id);
               self.reset();
               return({status: self.constants.STATUS_ERROR});
             }
             else
             {
               // got a good full packet!  Pass it to payload parser
-              logger.info('BRIDGE: Good total CRC finally!  Id = ', self.parsedObj.id);
               self.parsedObj.crcTotal = buf[idx];
               self.parsedObj.status = self.constants.STATUS_SUCCESS;
               self.parsedObj.device = self.parsePayload(self.parsedObj.id, self.parsedObj.payload, self.p);
+              logger.debug('PRO4: Good total CRC ', self.parsedObj);
               return(self.parsedObj);
 
             }
@@ -572,7 +608,7 @@ class Pro4
               let calcdChksum = CRC.crc32(self.parsedObj.payload); // calculate checksum of received data
               if (calcdChksum != self.parsedObj.crcTotal.readUInt32LE(0))
               {
-                logger.warn('BRIDGE: Bad total CRC32; possible id = ' + self.parsedObj.id);
+                logger.warn('PRO4: Bad total CRC32; possible id = ' + self.parsedObj.id);
                 self.reset();
                 return({status: self.constants.STATUS_ERROR});
               }
@@ -583,7 +619,7 @@ class Pro4
             }
             else // something went awry
             {
-              logger.warn('BRIDGE: Something went wrong with total CRC; possible id = ' + self.parsedObj.id);
+              logger.warn('PRO4: Something went wrong with total CRC; possible id = ' + self.parsedObj.id);
               self.reset();
               return({status: self.constants.STATUS_ERROR});            }
           }
@@ -630,7 +666,7 @@ class Pro4
         chksum ^= buf[i];
       }
       buf.writeUInt8(chksum, this.constants.PROTOCOL_PRO4_HEADER_SIZE);
-      logger.debug('DEBUG: My crc8 total = ' + chksum.toString(16));;
+      logger.debug('PRO4: My crc8 total = ' + chksum.toString(16));;
     }
 
     payload.copy(buf, headerLen);
@@ -645,10 +681,10 @@ class Pro4
         chksum ^= buf[i];
       }
       buf.writeUInt8(chksum, skip);
-      logger.debug('DEBUG: My crc8 total = ' + chksum.toString(16));
+      logger.debug('PRO4: My crc8 total = ' + chksum.toString(16));
     }
 
-    logger.warn('BRIDGE: Debug PRO4 request = ' + buf.toString('hex'));
+    logger.warn('PRO4: Debug PRO4 request = ' + buf.toString('hex'));
     return buf;
   };
 
