@@ -390,7 +390,7 @@ class Bridge extends EventEmitter
         self.results[clientId] = [];
         self.jobs[clientId] = new q({
                                       concurrency: 1,
-                                      timeout: 30,
+                                      timeout: 25,
                                       autostart: true,
                                       results: self.results[clientId]
                                     });
@@ -403,7 +403,7 @@ class Bridge extends EventEmitter
         });
         self.jobs[clientId].on('timeout', function (next, job) {
           logger.debug('BRIDGE: sendToMqtt() from clientId ', clientId, 'timed out; resetting parser state machine');
-          //self.parser.reset();
+          self.parser.reset();
           next();
         });
         self.jobs[clientId].on('end', function () {
