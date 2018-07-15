@@ -70,3 +70,19 @@ parser.reset();
 parseBuf = new Buffer.from('fddf3180f0680b53434e496402004022330500ffffff7fffffff7fffffff7fffffff7fffffff7fffffff7fffffff7fffffff7f66f107c3669e00c30060b33f00a0b43f00a0aa3f00c06941ffebf440785e87400000c07f0000c07f007400000000000000000000000000000000000062', 'hex');
 console.log(parser.parse(parseBuf));
 
+// should work - gripper test
+parser.reset();
+parseBuf = new Buffer.from('fddf6880000d03000082000000d86814842948', 'hex');
+console.log(parser.parse(parseBuf));
+
+/*
+// read file of test strings, one per line
+let lineReader = require('readline').createInterface({
+  input: require('fs').createReadStream('test.pro4')
+});
+
+lineReader.on('line', function (line) {
+  parser.reset();
+  parseBuf = new Buffer.from(line.trim(), 'hex');
+  console.log(parser.parse(parseBuf));
+}); */

@@ -128,6 +128,7 @@ class Pro4
 
     // VideoRay PRO4 thruster response payload
     this.ParserMotors = new Parser()
+      .uint8('deviceType')
       .floatle('rpm')
       .floatle('bus_v')
       .floatle('bus_i')

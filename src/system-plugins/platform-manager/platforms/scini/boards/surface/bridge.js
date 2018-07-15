@@ -162,7 +162,6 @@ class Bridge extends EventEmitter
       time:             0,
       timeDelta_ms:     0,
       updateInterval:   500,  // loop interval in ms
-      state:            0,     // 0 (stop), 2 (close), 3 (open)
       grippers:         [
         {
           name:         "Gripper 1",
@@ -705,22 +704,63 @@ class Bridge extends EventEmitter
 
       case 'gripper_open':
       {
-        self.gripperControl.state = 2;
+        self.gripperControl.grippers[0].state = 2;
         self.emitStatus(`gripper.gripper_open:${parameters[0]}`);
         break;
       }
 
       case 'gripper_close':
       {
-        self.gripperControl.state = 3;
+        self.gripperControl.grippers[0].state = 3;
         self.emitStatus(`gripper.gripper_close:${parameters[0]}`);
         break;
       }
 
       case 'gripper_stationary':
       {
-        self.gripperControl.state = 0;
+        self.gripperControl.grippers[0].state = 0;
         self.emitStatus(`gripper.gripper_stationary:${parameters[0]}`);
+        break;
+      }
+
+      case 'sampler_open':
+      {
+        self.gripperControl.grippers[1].state = 2;
+        self.emitStatus(`gripper.sampler_open:${parameters[0]}`);
+        break;
+      }
+
+      case 'sampler_close':
+      {
+        self.gripperControl.grippers[1].state = 3;
+        self.emitStatus(`gripper.sampler_close:${parameters[0]}`);
+        break;
+      }
+
+      case 'sampler_stationary':
+      {
+        self.gripperControl.grippers[1].state = 0;
+        self.emitStatus(`gripper.sampler_stationary:${parameters[0]}`);
+        break;
+      }
+      case 'trim_open':
+      {
+        self.gripperControl.grippers[2].state = 2;
+        self.emitStatus(`gripper.trim_open:${parameters[0]}`);
+        break;
+      }
+
+      case 'trim_close':
+      {
+        self.gripperControl.grippers[2].state = 3;
+        self.emitStatus(`gripper.trim_close:${parameters[0]}`);
+        break;
+      }
+
+      case 'trim_stationary':
+      {
+        self.gripperControl.grippers[2].state = 0;
+        self.emitStatus(`gripper.trim_stationary:${parameters[0]}`);
         break;
       }
 
@@ -1290,25 +1330,23 @@ class Bridge extends EventEmitter
   {
     // XXX - gripper control still in draft
     let self = this;
-    let packetBuf;
 
     // Update time
     this.gripperControl.time += this.gripperControl.timeDelta_ms;
-
-    let payload = new Buffer.allocUnsafe(this.gripperControl.pro4.len);
 
     // shorter names for easier reading
     let g = this.gripperControl.grippers;
     let p = this.gripperControl.pro4;
 
-    payload.writeUInt8(g[0].state, 0);   // gripper command
-
     // Generate new pro4 packet for each address and send to all
-    for (let i = 0; i < g.length; i++) {
+    for (let i = 0; i < g.length; i++)
+    {
       (function() {
         let j = i;  // loop closure
-        // Packet len = Header + 4-byte CRC + payload + 4-byte CRC = 27
-        packetBuf = self.parser.encode(p.pro4Sync, g[j].nodeId, p.flags, p.csrAddress, p.len, payload);
+        // Packet len = 6-byte header + 1-byte CRC + 1-byte payload + 1-byte CRC = 9
+        let payload = new Buffer.allocUnsafe(self.gripperControl.pro4.len);
+        payload.writeUInt8(g[j].state, 0);   // gripper command
+        let packetBuf = self.parser.encode(p.pro4Sync, g[j].nodeId, p.flags, p.csrAddress, p.len, payload);
         // maintain light state by updating at least once per second
         self.addToQueue(packetBuf);
       })();
