@@ -16,7 +16,7 @@
 			],
 			"env": {
 				"EXTERNAL_CAM": "true",
-				"EXTERNAL_CAM_URL": "http://192.168.1.222:8080/bmimg",
+				"EXTERNAL_CAM_URL": "http://192.168.1.222:8081/bmimg",
 				"NODE_ENV": "development",
 				"PLATFORM": "scini",
 				"BOARD":	"surface",
@@ -34,7 +34,7 @@
 				"IGNORE_CACHE": "true",
 				"LOG_LEVEL":"debug"
 			},
-            "console": "internalConsole",			          
+            "console": "internalConsole",
 			"sourceMaps": false,
 			"outDir": null
 		},
@@ -49,7 +49,7 @@
             "outDir": null,
             "localRoot": "${workspaceRoot}",
             "remoteRoot": null
-        
+
 		}
 	]
 }
