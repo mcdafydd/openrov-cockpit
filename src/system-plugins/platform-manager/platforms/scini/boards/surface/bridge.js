@@ -330,6 +330,10 @@ class Bridge extends EventEmitter
         {
           self.jobs[clientId].cb(); // advance queue
 
+          if (parsedObj.type == 'sensors')
+          {
+            self.updateSensors(parsedObj); // handles IMU calculations and sending sensor data to cockpit
+          }
           // send parsed device data to browser telemetry plugin
           for (let prop in parsedObj.device)
           {
@@ -1191,6 +1195,7 @@ class Bridge extends EventEmitter
     return (value - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
   }
 
+  /*
   normalizeAngle360( a )
   {
     return ((a > 360.0) ? (a - 360.0) : ((a < 0.0) ? (a + 360.0) : a));
@@ -1200,7 +1205,7 @@ class Bridge extends EventEmitter
   {
     return ((a > 180.0) ? (a - 360.0) : ((a < -180.0) ? (a + 360.0) : a));
   }
-
+  */
   // ****** SCINI specific device update functions ******
   updateLights()
   {
@@ -1332,11 +1337,11 @@ class Bridge extends EventEmitter
     let self = this;
 
     // Update time
-    this.gripperControl.time += this.gripperControl.timeDelta_ms;
+    self.gripperControl.time += self.gripperControl.timeDelta_ms;
 
     // shorter names for easier reading
-    let g = this.gripperControl.grippers;
-    let p = this.gripperControl.pro4;
+    let g = self.gripperControl.grippers;
+    let p = self.gripperControl.pro4;
 
     // Generate new pro4 packet for each address and send to all
     for (let i = 0; i < g.length; i++)
@@ -1388,113 +1393,55 @@ class Bridge extends EventEmitter
   }
 
   // Updates power supply values, IMU, depth sensors, etc. after request
-  updateSensors()
+  updateSensors(parsedObj)
   {
-  // Update time
-  this.sensors.time += this.sensors.timeDelta_ms;
+    logger.debug('BRIDGE: Updating sensors');
+    let self = this;
+    let p = parsedObj.device;
+    // Update time
+    self.sensors.time += self.sensors.timeDelta_ms;
 
-      // Generate pitch -90:90 degrees
-      this.sensors.imu.pitch = 90 * Math.sin( this.sensors.time * ( Math.PI / 10000 ) );
+    self.sensors.depth.temp = p.kellerTemperature;
+    self.sensors.depth.pressure = p.kellerPressure;
+    self.sensors.imu.pitch = Math.atan2(-p.accel_x, p.accel_z);
+    self.sensors.imu.roll = Math.atan2(p.accel_y, Math.sqrt(p.accel_x * p.accel_y - p.accel_z^2));
+    self.sensors.imu.yaw = 0;  // needs work to handle drift
 
-      // Generate roll -90:90 degrees
-      this.sensors.imu.roll = 90 * Math.sin( this.sensors.time * ( Math.PI / 30000 ) );
+    let result = "";
+    // Handle imu mode for yaw/heading
+    if( self.sensors.imu.mode === 0 )
+    {
+      // GYRO mode
+      //result += 'imu_y:' + self.encode( normalizeAngle180( self.sensors.imu.yaw - self.sensors.imu.yawOffset ) ) + ';';
+      result += 'imu_y:' + self.encode( self.sensors.imu.yaw - self.sensors.imu.yawOffset ) + ';';
+    }
+    else if( self.sensors.imu.mode === 1 )
+    {
+      // MAG mode
+      result += 'imu_y:' + self.encode( self.sensors.imu.yaw ) + ';';
+    }
 
-      // Generate yaw between -120:120 degrees
-      let baseYaw = 120 * Math.sin( this.sensors.time * ( Math.PI / 10000 ) );
+    // Create result string (Note: we don't bother to take into account water type or offsets w.r.t. temperature or pressure )
+    result += 'imu_p:' + self.encode( self.sensors.imu.pitch - self.sensors.imu.pitchOffset ) + ';';
+    result += 'imu_r:' + self.encode( self.sensors.imu.roll - self.sensors.imu.rollOffset )+ ';';
+    result += 'depth_d:' + self.encode( self.sensors.depth.depth - self.sensors.depth.depthOffset ) + ';';
+    result += 'depth_t:' + self.encode( self.sensors.depth.temp ) + ';';
+    result += 'depth_p:' + self.encode( self.sensors.depth.pressure ) + ';';
+    self.emitStatus(result);
 
-      // Handle mode switches (gyro mode is -180:180, mag mode is 0:360)
-      if( this.sensors.imu.mode === 0 )
-      {
-        this.sensors.imu.yaw = baseYaw;
-      }
-      else if( this.sensors.imu.mode === 1 )
-      {
-        this.sensors.imu.yaw = normalizeAngle360( baseYaw );
-      }
+    /*
+    // Create result string
+    result = "";
+    result += 'BT2I:' + self.sensors.ps.bt2i + ';';
+    result += 'BT1I:' + self.sensors.ps.bt1i + ';';
+    result += 'BRDV:' + self.sensors.ps.brdv + ';';
+    result += 'vout:' + self.sensors.ps.vout + ';';
+    result += 'iout:' + self.sensors.ps.iout + ';';
+    result += 'time:' + self.sensors.ps.time + ';';
+    result += 'baro_p:' + self.sensors.ps.baro_p + ';';
+    result += 'baro_t:' + self.sensors.ps.baro_t + ';';
 
-      // Create result string
-      let result = "";
-      result += 'imu_p:' + this.encode( this.sensors.imu.pitch - this.sensors.imu.pitchOffset ) + ';';
-      result += 'imu_r:' + this.encode( this.sensors.imu.roll - this.sensors.imu.rollOffset )+ ';';
-
-      // Handle imu mode for yaw/heading
-      if( this.sensors.imu.mode === 0 )
-      {
-        // GYRO mode
-        result += 'imu_y:' + this.encode( normalizeAngle180( this.sensors.imu.yaw - this.sensors.imu.yawOffset ) ) + ';';
-      }
-      else if( this.sensors.imu.mode === 1 )
-      {
-        // MAG mode
-        result += 'imu_y:' + this.encode( this.sensors.imu.yaw ) + ';';
-      }
-
-      // DEPTH
-      // Generate depth from -10:10 meters
-      this.sensors.depth.depth = 10 * Math.sin( this.sensors.time * ( Math.PI / 20000 ) );
-
-      // Generate temperature from 15:25 degrees
-      this.sensors.depth.temp = 20 + ( 5 * Math.sin( this.sensors.time * ( Math.PI / 40000 ) ) );
-
-      // Generate pressure from 50:70 kPa
-      this.sensors.depth.pressure = 60 + ( 10 * Math.sin( this.sensors.time * ( Math.PI / 40000 ) ) );
-
-      // Create result string (Note: we don't bother to take into account water type or offsets w.r.t. temperature or pressure )
-
-      result = "";
-      result += 'depth_d:' + this.encode( this.sensors.depth.depth - this.sensors.depth.depthOffset ) + ';';
-      result += 'depth_t:' + this.encode( this.sensors.depth.temp ) + ';';
-      result += 'depth_p:' + this.encode( this.sensors.depth.pressure ) + ';';
-
-      // Power Supplies
-      // Generate a current baseline from 1:2 amps
-      let currentBase = ( ( Math.random() * 1 ) + 1 );
-
-      // Generate currents for each battery tube from the base current, deviation of +/- 0.2A
-      this.sensors.ps.bt1i = currentBase + ( ( Math.random() * 0.4 ) - 0.2 );
-      this.sensors.ps.bt2i = currentBase + ( ( Math.random() * 0.4 ) - 0.2 );
-
-      // Get total current by adding the two tube currents
-      this.sensors.ps.iout = this.sensors.ps.bt1i + this.sensors.ps.bt2i;
-
-      // Generate board voltage (ramps up and down between 5V and 12V)
-      if( this.sensors.ps.brdvRampUp )
-      {
-        this.sensors.ps.brdv += 0.5;
-        if( this.sensors.ps.brdv >= 12 )
-        {
-          this.sensors.ps.brdvRampUp = false;
-        }
-      }
-      else
-      {
-        this.sensors.ps.brdv -= 0.5;
-        if( this.sensors.ps.brdv <= 5 )
-        {
-          this.sensors.ps.brdvRampUp = true;
-        }
-      }
-
-      this.sensors.ps.vout = this.sensors.ps.brdv;
-
-      //Generate internal pressure values
-      this.sensors.ps.baro_p = 30000000;
-      let num = Math.floor(Math.random()*1000000) + 1; // this will get a number between 1 and 99;
-      num *= Math.floor(Math.random()*2) == 1 ? 1 : -1; // this will add minus sign in 50% of cases
-      this.sensors.ps.baro_p += num;
-
-      // Create result string
-      result = "";
-      result += 'BT2I:' + this.sensors.ps.bt2i + ';';
-      result += 'BT1I:' + this.sensors.ps.bt1i + ';';
-      result += 'BRDV:' + this.sensors.ps.brdv + ';';
-      result += 'vout:' + this.sensors.ps.vout + ';';
-      result += 'iout:' + this.sensors.ps.iout + ';';
-      result += 'time:' + this.sensors.ps.time + ';';
-      result += 'baro_p:' + this.sensors.ps.baro_p + ';';
-      result += 'baro_t:' + this.sensors.ps.baro_t + ';';
-
-      this.emitStatus(result);
+    self.emitStatus(result);*/
   }
 }
 

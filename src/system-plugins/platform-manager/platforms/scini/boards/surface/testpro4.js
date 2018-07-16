@@ -75,7 +75,6 @@ parser.reset();
 parseBuf = new Buffer.from('fddf6880000d03000082000000d86814842948', 'hex');
 console.log(parser.parse(parseBuf));
 
-/*
 // read file of test strings, one per line
 let lineReader = require('readline').createInterface({
   input: require('fs').createReadStream('test.pro4')
@@ -85,4 +84,4 @@ lineReader.on('line', function (line) {
   parser.reset();
   parseBuf = new Buffer.from(line.trim(), 'hex');
   console.log(parser.parse(parseBuf));
-}); */
+}); 
