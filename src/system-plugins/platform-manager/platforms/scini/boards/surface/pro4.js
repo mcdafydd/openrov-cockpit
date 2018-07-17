@@ -676,7 +676,7 @@ class Pro4
     // Create PRO4 packet
     let headerLen = this.constants.PROTOCOL_PRO4_HEADER_SIZE + padding;
     let skip = headerLen + len;
-    let buf = new Buffer.allocUnsafe(skip + padding);
+    let buf = new Buffer.allocUnsafe(skip + padding); // should hold entire payload
     buf.writeUInt16LE(sync, 0);
     buf.writeUInt8(id, 2);
     buf.writeUInt8(flags, 3);
@@ -702,9 +702,11 @@ class Pro4
       buf.writeUInt32LE(CRC.crc32(buf.slice(headerLen, skip)), skip);
     }
     if (sync === this.constants.SYNC_REQUEST8LE) {
-      chksum = buf[7] ^ buf[8];
-      for (let i = 9; i < skip; i++) {
-        chksum ^= buf[i];
+      chksum = buf[7];
+      if (len > 1) {
+        for (let i = 8; i < skip; i++) {
+          chksum ^= buf[i];
+        }
       }
       buf.writeUInt8(chksum, skip);
       logger.debug('PRO4: My crc8 total = ' + chksum.toString(16));
