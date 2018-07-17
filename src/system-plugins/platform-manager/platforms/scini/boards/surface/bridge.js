@@ -166,16 +166,19 @@ class Bridge extends EventEmitter
         {
           name:         "Gripper 1",
           nodeId:       0x61,  // PRO4 packet ID
+          transmit:     false,
           state:        0      // 0 (stop), 2 (close), 3 (open)
         },
         {
           name:         "Gripper 2 - water sampler",
           nodeId:       0x62,   // PRO4 packet ID
+          transmit:     false,
           state:        0       // 0 (stop), 2 (close), 3 (open)
         },
         {
           name:         "Gripper 3 - trim",
           nodeId:       0x63,  // PRO4 packet ID
+          transmit:     false,
           state:        0      // 0 (stop), 2 (close), 3 (open)
         }
       ],
@@ -1352,8 +1355,26 @@ class Bridge extends EventEmitter
         let payload = new Buffer.allocUnsafe(self.gripperControl.pro4.len);
         payload.writeUInt8(g[j].state, 0);   // gripper command
         let packetBuf = self.parser.encode(p.pro4Sync, g[j].nodeId, p.flags, p.csrAddress, p.len, payload);
-        // maintain light state by updating at least once per second
-        self.addToQueue(packetBuf);
+        // maintain state by updating at least once per second
+        // but stop sending if state = 0 (stationary) after transmitting one stationary command
+        if (g[j].state == 0 && g[j].transmit == true)
+        {
+          self.addToQueue(packetBuf);
+          g[j].transmit = false;
+        }
+        else if (g[j].transmit == true)
+        {
+          self.addToQueue(packetBuf);
+        }
+        else if (g[j].state != 0 && g[j].transmit == false)
+        {
+          self.addToQueue(packetBuf);
+          g[j].transmit = true;
+        }
+        else
+        {
+          logger.debug(`BRIDGE: updateGrippers() bad state = ${g[j]}`);
+        }
       })();
     }
   }

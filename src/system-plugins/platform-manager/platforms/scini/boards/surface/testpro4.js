@@ -70,11 +70,24 @@ parser.reset();
 parseBuf = new Buffer.from('fddf3180f0680b53434e496402004022330500ffffff7fffffff7fffffff7fffffff7fffffff7fffffff7fffffff7fffffff7f66f107c3669e00c30060b33f00a0b43f00a0aa3f00c06941ffebf440785e87400000c07f0000c07f007400000000000000000000000000000000000062', 'hex');
 console.log(parser.parse(parseBuf));
 
+// should work - extra-long BAM packet
+parser.reset();
+parseBuf = new Buffer.from('fddf4380f0687953434e496402004000000500ffffff7fffffff7fffffff7fffffff7fffffff7fffffff7fffffff7fffffff7fccf6e2c2cc50d4c200a0d23f0080d43f0000cd3f00a68b4100821241c9cd9f400000c07f0000c07f00000100ffff0100fdff4b0000000000000000005f4e4964020040ff050000feffb3667a4399d98c4300401542ffffff', 'hex');
+console.log(parser.parse(parseBuf));
+
+// should work - extra-long BAM packet but split in two parts
+parser.reset();
+parseBuf = new Buffer.from('fddf4380f0687953434e496402004000000500ffffff7fffffff7fffffff7fffffff7fffffff7fffffff7fffffff7fffffff7fccf6e2c2cc50d4c200a0d23f', 'hex');
+console.log(parser.parse(parseBuf));
+parseBuf = new Buffer.from('0080d43f0000cd3f00a68b4100821241c9cd9f400000c07f0000c07f00000100ffff0100fdff4b0000000000000000005f4e4964020040ff050000feffb3667a4399d98c4300401542ffffff', 'hex');
+console.log(parser.parse(parseBuf));
+
 // should work - gripper test
 parser.reset();
 parseBuf = new Buffer.from('fddf6880000d03000082000000d86814842948', 'hex');
 console.log(parser.parse(parseBuf));
 
+/*
 // read file of test strings, one per line
 let lineReader = require('readline').createInterface({
   input: require('fs').createReadStream('test.pro4')
@@ -84,4 +97,4 @@ lineReader.on('line', function (line) {
   parser.reset();
   parseBuf = new Buffer.from(line.trim(), 'hex');
   console.log(parser.parse(parseBuf));
-}); 
+}); */
