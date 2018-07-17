@@ -164,46 +164,6 @@
       {
         name: 'motors.fault',
         description: 'Thruster fault code'
-      },
-      {
-        name: 'gripper.gripper_open',
-        description: 'Gripper open command active'
-      },
-      {
-        name: 'gripper.gripper_closed',
-        description: 'Gripper close command active'
-      },
-      {
-        name: 'gripper.gripper_stationary',
-        description: 'Gripper stationary command active'
-      },
-      {
-        name: 'gripper.cmd',
-        description: 'Gripper command response'
-      },
-      {
-        name: 'gripper.cmdStatus',
-        description: 'Gripper command response status'
-      },
-      {
-        name: 'gripper.lim_i',
-        description: 'Gripper current limit'
-      },
-      {
-        name: 'gripper.current',
-        description: 'Gripper current'
-      },
-      {
-        name: 'gripper.temp',
-        description: 'Gripper temperature'
-      },
-      {
-        name: 'gripper.devAddress',
-        description: 'Gripper dev address'
-      },
-      {
-        name: 'gripper.firmwareVersion',
-        description: 'Gripper firmware version'
       }]
     };
 

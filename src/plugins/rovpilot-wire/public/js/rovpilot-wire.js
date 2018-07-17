@@ -74,7 +74,7 @@
         {
           "h": { type: "button", 
                 action: 'rovPilot.toggleHeadingHold' },
-          "g": { type: "button", 
+          "y": { type: "button", 
                 action: 'rovPilot.toggleDepthHold' }
         }
       };

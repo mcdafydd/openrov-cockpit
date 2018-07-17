@@ -1,7 +1,7 @@
-(function(window) 
+(function(window)
 {
     'use strict';
-    class CameraServo 
+    class CameraServo
     {
         constructor( cockpit )
         {
@@ -18,7 +18,7 @@
             self.currentStep = 0;   // Alternative representation of targetPos
             self.stepMap = {};      // Automatically generated mapping of integer "steps" to target positions
 
-            this.actions = 
+            this.actions =
             {
                 "plugin.cameraServo.stepPositive":
                 {
@@ -63,9 +63,9 @@
                 }
             };
 
-            this.inputDefaults = 
+            this.inputDefaults =
             {
-                keyboard: 
+                keyboard:
                 {
                     "]": { type: "button",
                          action: "plugin.cameraServo.stepPositive" },
@@ -74,19 +74,15 @@
                     "[": { type: "button",
                          action: "plugin.cameraServo.stepNegative" }
                 },
-                gamepad: 
+                gamepad:
                 {
-                    "DPAD_UP": { type: "button",
-                         action: "plugin.cameraServo.stepPositive" },
                     "B": { type: "button",
-                         action: "plugin.cameraServo.center" },
-                    "DPAD_DOWN": { type: "button",
-                         action: "plugin.cameraServo.stepNegative" }
+                         action: "plugin.cameraServo.center" }
                 }
             };
         };
 
-        
+
 
         generateStepMap()
         {
@@ -253,7 +249,7 @@
 
         // This pattern will hook events in the cockpit and pull them all back
         // so that the reference to this instance is available for further processing
-        listen() 
+        listen()
         {
             var self = this;
 
