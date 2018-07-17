@@ -108,7 +108,6 @@
     for (let i in controls) {
       if (controls[i] != self.priorControls[i]) {
         updateRequired = true;
-        console.log('CM = ', controls, 'PR = ', self.priorControls);
         break;
       }
     }
@@ -118,7 +117,6 @@
           if (controls[control] != self.priorControls[control]) {
             let sendToRov = control + '(' + controls[control] + ')';
             self.globalEventLoop.emit('mcu.SendCommand', sendToRov);
-            console.log('CONTROL = ' + sendToRov);
           }
         }
       }
