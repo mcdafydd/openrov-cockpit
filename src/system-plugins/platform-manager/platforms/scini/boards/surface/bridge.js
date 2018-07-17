@@ -147,7 +147,7 @@ class Bridge extends EventEmitter
       power:            0,          // 0 to 1
       pro4:             {
         pro4Sync:       pro4.constants.SYNC_REQUEST32LE,
-        pro4Addresses:  [61, 62, 63], // all updated at same time
+        pro4Addresses:  [61, 62, 63], // all updated at same time - note these are NOT hex addresses
         flags:          2,          // defined by VideoRay
         csrAddress:     0,          // custom command address
         len:            4 * 3       // 3 led banks
@@ -207,7 +207,7 @@ class Bridge extends EventEmitter
       motors:           [
         {
           name:         "aft vertical",
-          nodeId:       12,     // PRO4 packet ID
+          nodeId:       16,     // PRO4 packet ID
           motorId:      0,      // device protocol ID, position in PRO4 payload
           value:        0,      // thrust value (-1 to +1)
           reverse:      false,  // boolean
@@ -278,7 +278,7 @@ class Bridge extends EventEmitter
     self.motorInterval = setInterval( function() { return self.updateMotors(); },     self.motorControl.updateInterval );
     self.rotateMotorInterval = setInterval( function() { return self.rotateMotor(); },     self.motorControl.rotateInterval );
     // XXX - gripper control in draft status - uncomment following line to test gripper control
-    //self.gripperInterval = setInterval( function() { return self.updateGrippers(); },     self.gripperControl.updateInterval );
+    self.gripperInterval = setInterval( function() { return self.updateGrippers(); },     self.gripperControl.updateInterval );
 
 
     // Connect to MQTT broker and setup all event handlers
@@ -709,62 +709,62 @@ class Bridge extends EventEmitter
       case 'gripper_open':
       {
         self.gripperControl.grippers[0].state = 2;
-        self.emitStatus(`gripper.gripper_open:${parameters[0]}`);
+        self.emitStatus(`gripper.open:1;gripper.close:0;`);
         break;
       }
 
       case 'gripper_close':
       {
         self.gripperControl.grippers[0].state = 3;
-        self.emitStatus(`gripper.gripper_close:${parameters[0]}`);
+        self.emitStatus(`gripper.close:1;gripper.open:0;`);
         break;
       }
 
       case 'gripper_stationary':
       {
         self.gripperControl.grippers[0].state = 0;
-        self.emitStatus(`gripper.gripper_stationary:${parameters[0]}`);
+        self.emitStatus(`gripper.stationary:1;gripper.close:0;gripper.open:0;`);
         break;
       }
 
       case 'sampler_open':
       {
         self.gripperControl.grippers[1].state = 2;
-        self.emitStatus(`gripper.sampler_open:${parameters[0]}`);
+        self.emitStatus(`sampler.open:1;sampler.close:0;`);
         break;
       }
 
       case 'sampler_close':
       {
         self.gripperControl.grippers[1].state = 3;
-        self.emitStatus(`gripper.sampler_close:${parameters[0]}`);
+        self.emitStatus(`sampler.close:1;sampler.open:0;`);
         break;
       }
 
       case 'sampler_stationary':
       {
         self.gripperControl.grippers[1].state = 0;
-        self.emitStatus(`gripper.sampler_stationary:${parameters[0]}`);
+        self.emitStatus(`sampler.stationary:1;sampler.close:0;sampler.open:0;`);
         break;
       }
       case 'trim_open':
       {
         self.gripperControl.grippers[2].state = 2;
-        self.emitStatus(`gripper.trim_open:${parameters[0]}`);
+        self.emitStatus(`trim.open:1;trim.close:0;`);
         break;
       }
 
       case 'trim_close':
       {
         self.gripperControl.grippers[2].state = 3;
-        self.emitStatus(`gripper.trim_close:${parameters[0]}`);
+        self.emitStatus(`trim.close:1;trim.open:0;`);
         break;
       }
 
       case 'trim_stationary':
       {
         self.gripperControl.grippers[2].state = 0;
-        self.emitStatus(`gripper.trim_stationary:${parameters[0]}`);
+        self.emitStatus(`trim_stationary:1;trim_close:0;trim_open:0;`);
         break;
       }
 
@@ -1403,8 +1403,8 @@ class Bridge extends EventEmitter
 
     self.sensors.depth.temp = p.kellerTemperature;
     self.sensors.depth.pressure = p.kellerPressure;
-    self.sensors.imu.pitch = Math.atan2(-p.accel_x, p.accel_z);
-    self.sensors.imu.roll = Math.atan2(p.accel_y, Math.sqrt(p.accel_x * p.accel_y - p.accel_z^2));
+    self.sensors.imu.pitch = p.angle_y;
+    self.sensors.imu.roll = p.angle_x;
     self.sensors.imu.yaw = 0;  // needs work to handle drift
 
     let result = "";
@@ -1422,8 +1422,8 @@ class Bridge extends EventEmitter
     }
 
     // Create result string (Note: we don't bother to take into account water type or offsets w.r.t. temperature or pressure )
-    result += 'imu_p:' + self.encode( self.sensors.imu.pitch - self.sensors.imu.pitchOffset ) + ';';
-    result += 'imu_r:' + self.encode( self.sensors.imu.roll - self.sensors.imu.rollOffset )+ ';';
+    result += 'imu_p:' + self.encode(self.sensors.imu.pitch - self.sensors.imu.pitchOffset)*Math.PI/180 + ';';
+    result += 'imu_r:' + self.encode(self.sensors.imu.roll - self.sensors.imu.rollOffset)*Math.PI/180 + ';';
     result += 'depth_d:' + self.encode( self.sensors.depth.depth - self.sensors.depth.depthOffset ) + ';';
     result += 'depth_t:' + self.encode( self.sensors.depth.temp ) + ';';
     result += 'depth_p:' + self.encode( self.sensors.depth.pressure ) + ';';
