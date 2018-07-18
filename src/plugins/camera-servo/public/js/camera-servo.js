@@ -185,6 +185,7 @@
 
         stepPositive()
         {
+            /*
             // Increment step position if possible
             if( this.currentStep !== this.stepMap.max )
             {
@@ -193,10 +194,14 @@
 
             // Update position based on new step
             this.updateStep();
+            */
+           // XXX - SCINI servo
+           this.cockpit.rov.emit('plugin.cameraServo.stepPositive', 1);
         }
 
         stepNegative()
         {
+            /*
             // Increment step position if possible
             if( this.currentStep !== this.stepMap.min )
             {
@@ -205,6 +210,9 @@
 
             // Update position based on new step
             this.updateStep();
+            */
+           // XXX - SCINI servo
+           this.cockpit.rov.emit('plugin.cameraServo.stepNegative', 1);
         }
 
         center()

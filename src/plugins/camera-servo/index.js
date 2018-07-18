@@ -1,4 +1,4 @@
-(function() 
+(function()
 {
     const ArduinoHelper = require('ArduinoHelper')();
     const Periodic = require( 'Periodic' );
@@ -94,7 +94,7 @@
                 }
             });
 
-            this.listeners = 
+            this.listeners =
             {
                 settings: new Listener( this.globalBus, 'settings-change.cameraServo', true, function( settings )
                 {
@@ -109,7 +109,7 @@
 
                     // Enable MCU Status listener, if not already enabled
                     self.listeners.mcuStatus.enable();
-                    
+
                     // Emit settings update to cockpit
                     self.cockpitBus.emit( 'plugin.cameraServo.settingsChange', self.settings );
 
@@ -135,7 +135,7 @@
                     }
 
                     // Servo position
-                    if( 'camServ_pos' in data ) 
+                    if( 'camServ_pos' in data )
                     {
                         // Convert from integer to float
                         var angle = decode( parseInt( data.camServ_pos ) );
@@ -145,7 +145,7 @@
                     }
 
                     // Servo target position
-                    if( 'camServ_tpos' in data ) 
+                    if( 'camServ_tpos' in data )
                     {
                         // Save encoded version for sync validation purposes
                         self.mcuTargetPos_enc = parseInt( data.camServ_tpos );
@@ -168,7 +168,24 @@
                         // Set new target position
                         self.setTargetPos( pos );
                     }
-                })
+                }),
+
+                stepPositive: new Listener( this.cockpitBus, 'plugin.cameraServo.stepPositive', false, function( value )
+                {
+                    var command = 'camServ_spd(' + 0x6000 + ')';
+
+                    // Emit command to mcu
+                    self.globalBus.emit( 'mcu.SendCommand', command );
+                }),
+
+                stepNegative: new Listener( this.cockpitBus, 'plugin.cameraServo.stepNegative', false, function( value )
+                {
+                    var command = 'camServ_spd(' + 0xa000 + ')';
+
+                    // Emit command to mcu
+                    self.globalBus.emit( 'mcu.SendCommand', command );
+                }),
+
             }
         }
 
@@ -195,7 +212,7 @@
             // Start targetPos sync, if not already running
             self.SyncTargetPosition.start();
         }
-        
+
         start()
         {
             this.listeners.settings.enable();
@@ -248,7 +265,7 @@
                         'type': 'boolean',
                         'format': 'checkbox',
                         'default': false
-                    }  
+                    }
                 },
 
                 // TODO: Need to classify which settings are used at various levels: MCU Model, Local Model, UI model
@@ -265,7 +282,7 @@
     }
 
 
-    module.exports = function(name, deps) 
+    module.exports = function(name, deps)
     {
         if( process.env.PRODUCTID == "trident" )
         {
