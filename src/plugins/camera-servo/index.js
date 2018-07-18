@@ -118,6 +118,10 @@
 
                     // Initiate a sync of the settings with the MCU
                     self.SyncSettings.start();
+
+                    // Enable SCINI servo listeners
+                    self.listeners.stepNegative.enable();
+                    self.listeners.stepPositive.enable();
                 }),
 
                 mcuStatus: new Listener( this.globalBus, 'mcu.status', false, function( data )
@@ -172,20 +176,18 @@
 
                 stepPositive: new Listener( this.cockpitBus, 'plugin.cameraServo.stepPositive', false, function( value )
                 {
-                    var command = 'camServ_spd(' + 0x6000 + ')';
-
+                    let command = 'camServ_cmd(' + 0x6000 + ')';
                     // Emit command to mcu
                     self.globalBus.emit( 'mcu.SendCommand', command );
                 }),
 
                 stepNegative: new Listener( this.cockpitBus, 'plugin.cameraServo.stepNegative', false, function( value )
                 {
-                    var command = 'camServ_spd(' + 0xa000 + ')';
+                    let command = 'camServ_cmd(' + 0xa000 + ')';
 
                     // Emit command to mcu
                     self.globalBus.emit( 'mcu.SendCommand', command );
-                }),
-
+                })
             }
         }
 
