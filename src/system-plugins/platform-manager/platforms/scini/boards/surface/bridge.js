@@ -36,7 +36,6 @@
 Example OpenROV strings to convert to PRO4 not yet integrated
 
 START  camServ_inv(0);
-START  camServ_spd(45000);
 START  depth_water(0);
 START  imu_level(0,0);
 START  wake();
@@ -120,11 +119,19 @@ class Bridge extends EventEmitter
         payloadLenBam:  7,          // send write to control servos, GPIOs
         payloadCmdNoop: 0,          // no write, just read all values
         payloadCmdBam:  0x02,       // send write to control servos, GPIOs
-        payloadServo1:  0x0040,     // 2 byte servo 1 angle (little endian)
-        payloadServo2:  0x2233,     // 2 byte servo 2 angle (little endian)
-        payloadGpio:    0xa5        // 1 byte output bits
+        payloadServo1:  0x0000,     // 2 byte servo 1 angle
+        payloadServo2:  0x0000,     // 2 byte servo 2 angle
+        payloadGpio:    0x00,       // 1 byte output bits
+        noopPayload:    new Buffer.allocUnsafe(6),  // value should equal lenNoop
+        bamPayload:     new Buffer.allocUnsafe(11)  // value should equal lenBam
       }
     }
+    this.sensors.pro4.noopPayload.writeUInt32BE(this.sensors.pro4.payloadHeader, 0);   // "SCNI"
+    this.sensors.pro4.noopPayload.writeUInt8(this.sensors.pro4.payloadLenNoop, 4);     // payload len
+    this.sensors.pro4.noopPayload.writeUInt8(this.sensors.pro4.payloadCmdNoop, 5);     // payload cmd
+    this.sensors.pro4.bamPayload.writeUInt32BE(this.sensors.pro4.payloadHeader, 0);    // "SCNI"
+    this.sensors.pro4.bamPayload.writeUInt8(this.sensors.pro4.payloadLenBam, 4);       // payload len
+    this.sensors.pro4.bamPayload.writeUInt8(this.sensors.pro4.payloadCmdBam, 5);       // payload cmd
 
     this.clumpLights = {
       time:             0,
@@ -166,19 +173,16 @@ class Bridge extends EventEmitter
         {
           name:         "Gripper 1",
           nodeId:       0x61,  // PRO4 packet ID
-          transmit:     false,
           state:        0      // 0 (stop), 2 (close), 3 (open)
         },
         {
           name:         "Gripper 2 - water sampler",
           nodeId:       0x62,   // PRO4 packet ID
-          transmit:     false,
           state:        0       // 0 (stop), 2 (close), 3 (open)
         },
         {
           name:         "Gripper 3 - trim",
           nodeId:       0x63,  // PRO4 packet ID
-          transmit:     false,
           state:        0      // 0 (stop), 2 (close), 3 (open)
         }
       ],
@@ -280,8 +284,7 @@ class Bridge extends EventEmitter
     self.lightsInterval = setInterval( function() { return self.updateLights(); },       self.vehicleLights.updateInterval );
     self.motorInterval = setInterval( function() { return self.updateMotors(); },     self.motorControl.updateInterval );
     self.rotateMotorInterval = setInterval( function() { return self.rotateMotor(); },     self.motorControl.rotateInterval );
-    // XXX - gripper control in draft status - uncomment following line to test gripper control
-    self.gripperInterval = setInterval( function() { return self.updateGrippers(); },     self.gripperControl.updateInterval );
+    self.gripperInterval = setInterval( function() { return self.requestGrippers(); },     self.gripperControl.updateInterval );
 
 
     // Connect to MQTT broker and setup all event handlers
@@ -627,9 +630,11 @@ class Bridge extends EventEmitter
 
       case 'camServ_spd':
       {
+        let value = parseInt( parameters[0] );
+        self.updateServos(value);
+
         // Ack command
-        let speed = parseInt( parameters[0] );
-        self.emitStatus('camServ_spd:' + speed );
+        self.emitStatus('camServ_spd:' + value );
         break;
       }
 
@@ -1334,9 +1339,8 @@ class Bridge extends EventEmitter
       self.motorControl.responderIdx++;
   }
 
-  updateGrippers()
+  requestGrippers()
   {
-    // XXX - gripper control still in draft
     let self = this;
 
     // Update time
@@ -1352,29 +1356,11 @@ class Bridge extends EventEmitter
       (function() {
         let j = i;  // loop closure
         // Packet len = 6-byte header + 1-byte CRC + 1-byte payload + 1-byte CRC = 9
-        let payload = new Buffer.allocUnsafe(self.gripperControl.pro4.len);
+        let payload = new Buffer.allocUnsafe(p.len);
         payload.writeUInt8(g[j].state, 0);   // gripper command
         let packetBuf = self.parser.encode(p.pro4Sync, g[j].nodeId, p.flags, p.csrAddress, p.len, payload);
         // maintain state by updating at least once per second
-        // but stop sending if state = 0 (stationary) after transmitting one stationary command
-        if (g[j].state == 0 && g[j].transmit == true)
-        {
-          self.addToQueue(packetBuf);
-          g[j].transmit = false;
-        }
-        else if (g[j].transmit == true)
-        {
-          self.addToQueue(packetBuf);
-        }
-        else if (g[j].state != 0 && g[j].transmit == false)
-        {
-          self.addToQueue(packetBuf);
-          g[j].transmit = true;
-        }
-        else
-        {
-          logger.debug(`BRIDGE: updateGrippers() bad state = ${g[j]}`);
-        }
+        self.addToQueue(packetBuf);
       })();
     }
   }
@@ -1383,7 +1369,6 @@ class Bridge extends EventEmitter
   requestSensors()
   {
     let self = this;
-    let type = 'BAM';  // 'NOOP' (read) or 'BAM' (read / write servos, GPIOs)
 
     // shorter name for easier reading
     let p = self.sensors.pro4;
@@ -1392,15 +1377,35 @@ class Bridge extends EventEmitter
     // intervals
     self.sensors.time += self.sensors.timeDelta_ms;
 
-    let payload = new Buffer.allocUnsafe(self.sensors.pro4.lenBam);
-    payload.writeUInt32BE(p.payloadHeader, 0);  // "SCNI"
-    payload.writeUInt8(p.payloadLenBam, 4);     // payload len
-    payload.writeUInt8(p.payloadCmdBam, 5);     // payload cmd
-    payload.writeUInt16BE(p.payloadServo1, 6);  // payload servo1
+    // Generate new pro4 packet for each address and send to all modules
+    for (let i = 0; i < p.pro4Addresses.length; i++) {
+      (function() {
+        let j = i;  // loop closure
+        // Packet len = Header + 1-byte CRC + payload + 1-byte CRC = 14
+        let packetBuf = self.parser.encode(p.pro4Sync, p.pro4Addresses[j], p.flags, p.csrAddress, p.lenNoop, p.noopPayload);
+        self.addToQueue(packetBuf);
+      })();
+    }
+
+    logger.debug('BRIDGE: Sent Crumb644 NOOP request');
+  }
+
+  updateServos(value)
+  {
+    // we only care about servo 1 at the moment
+
+    let self = this;
+    // shorter name for easier reading
+    let p = self.sensors.pro4;
+
+    let payload = new Buffer.allocUnsafe(p.lenBam);
+
+    p.bamPayload.copy(payload);
+    payload.writeUInt16BE(value, 6);            // payload servo1
     payload.writeUInt16BE(p.payloadServo2, 8);  // payload servo2
     payload.writeUInt8(p.payloadGpio, 10);      // payload gpio
 
-    // Generate new pro4 packet for each address and send to all light modules
+    // Generate new pro4 packet for each address and send to all modules
     for (let i = 0; i < p.pro4Addresses.length; i++) {
       (function() {
         let j = i;  // loop closure
@@ -1409,8 +1414,6 @@ class Bridge extends EventEmitter
         self.addToQueue(packetBuf);
       })();
     }
-
-    logger.debug('BRIDGE: Sent Crumb644 ' + type + ' request');
   }
 
   // Updates power supply values, IMU, depth sensors, etc. after request
