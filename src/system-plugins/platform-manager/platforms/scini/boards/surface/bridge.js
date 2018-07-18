@@ -473,7 +473,6 @@ class Bridge extends EventEmitter
       case 'version':
       {
         self.emitStatus('ver:<<{{10024121ae3fa7fc60a5945be1e155520fb929dd}}>>');
-        logger.debug('ver:<<{{10024121ae3fa7fc60a5945be1e155520fb929dd}}>>');
         break;
       }
 
@@ -568,9 +567,6 @@ class Bridge extends EventEmitter
         // Update state object to be sent on next packet interval
         self.vehicleLights.power = power;
 
-        // DEBUG: dump values sent by OpenROV after scale/limit
-        logger.debug('Light value: ' + power);
-
         // Ack command
         setTimeout( function()
         {
@@ -592,9 +588,6 @@ class Bridge extends EventEmitter
 
         // Update state object to be sent on next packet interval
         self.clumpLights.power = power;
-
-        // DEBUG: dump values sent by OpenROV after scale/limit
-        logger.debug('External lights value: ' + power);
 
         // Ack command
         setTimeout( function()
@@ -630,25 +623,28 @@ class Bridge extends EventEmitter
 
       case 'camServ_spd':
       {
-        let value = parseInt( parameters[0] );
-        self.updateServos(value);
-
         // Ack command
-        self.emitStatus('camServ_spd:' + value );
+        self.emitStatus('camServ_spd:' + parameters[0] );
+        break;
+      }
+
+      case 'camServ_cmd':
+      {
+        self.updateServos(parameters[0]);
+        // Ack command
+        self.emitStatus('camServ_cmd:' + parameters[0] );
         break;
       }
 
       case 'eligt':
       {
         self.emitStatus('LIGPE:' + parameters[0] / 100);
-        logger.debug('External light status: ' + parameters[0] / 100);
         break;
       }
 
       case 'escp':
       {
         self.emitStatus('ESCP:' + parameters[0]);
-        logger.debug('ESC status: ' + parameters[0]);
         break;
       }
 
@@ -658,13 +654,11 @@ class Bridge extends EventEmitter
         {
           self.laserEnabled = false;
           self.emitStatus('claser:0');
-          logger.debug('Laser status: 0');
         }
         else
         {
           self.laserEnabled = true;
           self.emitStatus('claser:255');
-          logger.debug('Laser status: 255');
         }
 
         break;
@@ -681,7 +675,6 @@ class Bridge extends EventEmitter
         }
 
         self.emitStatus('targetDepth:' + (self.depthHoldEnabled ? targetDepth.toString() : self.DISABLED));
-        logger.debug('Depth hold enabled');
         break;
       }
 
@@ -690,7 +683,6 @@ class Bridge extends EventEmitter
         let targetDepth = -500;
         self.depthHoldEnabled = false;
         self.emitStatus('targetDepth:' + (self.depthHoldEnabled ? targetDepth.toString() : self.DISABLED));
-        logger.debug('Depth hold disabled');
         break;
       }
 
@@ -700,7 +692,6 @@ class Bridge extends EventEmitter
         targetHeading = self.sensors.imu.yaw;
         self.targetHoldEnabled = true;
         self.emitStatus('targetHeading:' + (self.targetHoldEnabled ? targetHeading.toString() : self.DISABLED));
-        logger.debug('Heading hold enabled');
         break;
       }
 
@@ -710,68 +701,67 @@ class Bridge extends EventEmitter
         targetHeading = -500;
         self.targetHoldEnabled = false;
         self.emitStatus('targetHeading:' + (self.targetHoldEnabled ? targetHeading.toString() : self.DISABLED));
-        logger.debug('Heading hold disabled');
         break;
       }
 
       case 'gripper_open':
       {
-        self.gripperControl.grippers[0].state = 2;
+        self.updateGripper(0x61, 2);
         self.emitStatus(`gripper.open:1;gripper.close:0;`);
         break;
       }
 
       case 'gripper_close':
       {
-        self.gripperControl.grippers[0].state = 3;
+        self.updateGripper(0x61, 3);
         self.emitStatus(`gripper.close:1;gripper.open:0;`);
         break;
       }
 
       case 'gripper_stationary':
       {
-        self.gripperControl.grippers[0].state = 0;
+        self.updateGripper(0x61, 0);
         self.emitStatus(`gripper.stationary:1;gripper.close:0;gripper.open:0;`);
         break;
       }
 
       case 'sampler_open':
       {
-        self.gripperControl.grippers[1].state = 2;
+        self.updateGripper(0x62, 2);
         self.emitStatus(`sampler.open:1;sampler.close:0;`);
         break;
       }
 
       case 'sampler_close':
       {
-        self.gripperControl.grippers[1].state = 3;
+        self.updateGripper(0x62, 3);
         self.emitStatus(`sampler.close:1;sampler.open:0;`);
         break;
       }
 
       case 'sampler_stationary':
       {
-        self.gripperControl.grippers[1].state = 0;
+        self.updateGripper(0x62, 0);
         self.emitStatus(`sampler.stationary:1;sampler.close:0;sampler.open:0;`);
         break;
       }
       case 'trim_open':
       {
-        self.gripperControl.grippers[2].state = 2;
+        self.updateGripper(0x63, 2);
         self.emitStatus(`trim.open:1;trim.close:0;`);
         break;
       }
 
       case 'trim_close':
       {
-        self.gripperControl.grippers[2].state = 3;
+        self.updateGripper(0x63, 3);
         self.emitStatus(`trim.close:1;trim.open:0;`);
         break;
       }
 
       case 'trim_stationary':
       {
-        self.gripperControl.grippers[2].state = 0;
+        self.updateGripper(0x63, 0);
         self.emitStatus(`trim_stationary:1;trim_close:0;trim_open:0;`);
         break;
       }
@@ -916,8 +906,6 @@ class Bridge extends EventEmitter
           self.motorControl.motors[4].value = thrust;
         }
 
-        // DEBUG: dump values sent by OpenROV
-        logger.debug('Sending throttle update: ' + thrust);
         // Ack command
         self.emitStatus('motors.throttle: ' + thrust );
         break;
@@ -958,7 +946,6 @@ class Bridge extends EventEmitter
           self.motorControl.motors[3].value = yaw2 * -1;
         }
 
-        logger.debug('Sending yaw update: ' + yaw);
         // Ack command
         self.emitStatus('motors.yaw:' + yaw );
         break;
@@ -999,7 +986,6 @@ class Bridge extends EventEmitter
           self.motorControl.motors[2].value = lift2;
         }
 
-        logger.debug('Sending lift update: ' + lift);
         // Ack command
         self.emitStatus('motors.lift:' + lift );
         break;
@@ -1040,7 +1026,6 @@ class Bridge extends EventEmitter
           self.motorControl.motors[2].value = pitch * -1;
         }
 
-        logger.debug('Sending pitch update: ' + pitch);
         // Ack command
         self.emitStatus('motors.pitch:' + pitch );
         break;
@@ -1082,7 +1067,6 @@ class Bridge extends EventEmitter
           self.motorControl.motors[3].value = strafe2;
         }
 
-        logger.debug('Sending strafe update: ' + strafe);
         // Ack command
         self.emitStatus('motors.strafe:' + strafe );
         break;
@@ -1355,14 +1339,29 @@ class Bridge extends EventEmitter
     {
       (function() {
         let j = i;  // loop closure
-        // Packet len = 6-byte header + 1-byte CRC + 1-byte payload + 1-byte CRC = 9
-        let payload = new Buffer.allocUnsafe(p.len);
-        payload.writeUInt8(g[j].state, 0);   // gripper command
-        let packetBuf = self.parser.encode(p.pro4Sync, g[j].nodeId, p.flags, p.csrAddress, p.len, payload);
+        // Packet len = 6-byte header + 1-byte CRC = 7
+        let packetBuf = self.parser.encode(p.pro4Sync, g[j].nodeId, p.flags, p.csrAddress, 0, 0);
         // maintain state by updating at least once per second
         self.addToQueue(packetBuf);
       })();
     }
+  }
+
+  updateGripper(id, command)
+  {
+    let self = this;
+
+    // shorter names for easier reading
+    let g = self.gripperControl.grippers;
+    let p = self.gripperControl.pro4;
+
+    // Generate new pro4 packet
+    // Packet len = 6-byte header + 1-byte CRC + 1-byte payload + 1-byte CRC = 9
+    let payload = new Buffer.allocUnsafe(p.len);
+    payload.writeUInt8(command, 0);   // gripper command
+    let packetBuf = self.parser.encode(p.pro4Sync, id, p.flags, p.csrAddress, p.len, payload);
+    // maintain state by updating at least once per second
+    self.addToQueue(packetBuf);
   }
 
   // send crumb644 sensor request
