@@ -695,21 +695,28 @@ class Pro4
       logger.debug('PRO4: My crc8 total = ' + chksum.toString(16));;
     }
 
-    payload.copy(buf, headerLen);
+    if (payload != 0)
+    {
+      payload.copy(buf, headerLen);
 
-    // Write total checksum
-    if (sync === this.constants.SYNC_REQUEST32LE) {
-      buf.writeUInt32LE(CRC.crc32(buf.slice(headerLen, skip)), skip);
-    }
-    if (sync === this.constants.SYNC_REQUEST8LE) {
-      chksum = buf[7];
-      if (len > 1) {
-        for (let i = 8; i < skip; i++) {
-          chksum ^= buf[i];
-        }
+      // Write total checksum
+      if (sync === this.constants.SYNC_REQUEST32LE) {
+        buf.writeUInt32LE(CRC.crc32(buf.slice(headerLen, skip)), skip);
       }
-      buf.writeUInt8(chksum, skip);
-      logger.debug('PRO4: My crc8 total = ' + chksum.toString(16));
+      if (sync === this.constants.SYNC_REQUEST8LE) {
+        chksum = buf[7];
+        if (len > 1) {
+          for (let i = 8; i < skip; i++) {
+            chksum ^= buf[i];
+          }
+        }
+        buf.writeUInt8(chksum, skip);
+        logger.debug('PRO4: My crc8 total = ' + chksum.toString(16));
+      }
+    }
+    else
+    {
+      buf = buf.slice(0,7); // read-only zero byte PRO4 request, no need for final checksum
     }
 
     logger.warn('PRO4: Debug PRO4 request = ' + buf.toString('hex'));
