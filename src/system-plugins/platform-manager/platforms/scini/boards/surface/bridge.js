@@ -706,62 +706,62 @@ class Bridge extends EventEmitter
 
       case 'gripper_open':
       {
-        self.updateGripper(0x61, 2);
+        self.updateGripper(self.gripperControl.grippers[0].nodeId, 2);
         self.emitStatus(`gripper.open:1;gripper.close:0;`);
         break;
       }
 
       case 'gripper_close':
       {
-        self.updateGripper(0x61, 3);
+        self.updateGripper(self.gripperControl.grippers[0].nodeId, 3);
         self.emitStatus(`gripper.close:1;gripper.open:0;`);
         break;
       }
 
       case 'gripper_stationary':
       {
-        self.updateGripper(0x61, 0);
+        self.updateGripper(self.gripperControl.grippers[0].nodeId, 0);
         self.emitStatus(`gripper.stationary:1;gripper.close:0;gripper.open:0;`);
         break;
       }
 
       case 'sampler_open':
       {
-        self.updateGripper(0x62, 2);
+        self.updateGripper(self.gripperControl.grippers[1].nodeId, 2);
         self.emitStatus(`sampler.open:1;sampler.close:0;`);
         break;
       }
 
       case 'sampler_close':
       {
-        self.updateGripper(0x62, 3);
+        self.updateGripper(self.gripperControl.grippers[1].nodeId, 3);
         self.emitStatus(`sampler.close:1;sampler.open:0;`);
         break;
       }
 
       case 'sampler_stationary':
       {
-        self.updateGripper(0x62, 0);
+        self.updateGripper(self.gripperControl.grippers[1].nodeId, 0);
         self.emitStatus(`sampler.stationary:1;sampler.close:0;sampler.open:0;`);
         break;
       }
       case 'trim_open':
       {
-        self.updateGripper(0x63, 2);
+        self.updateGripper(self.gripperControl.grippers[2].nodeId, 2);
         self.emitStatus(`trim.open:1;trim.close:0;`);
         break;
       }
 
       case 'trim_close':
       {
-        self.updateGripper(0x63, 3);
+        self.updateGripper(self.gripperControl.grippers[2].nodeId, 3);
         self.emitStatus(`trim.close:1;trim.open:0;`);
         break;
       }
 
       case 'trim_stationary':
       {
-        self.updateGripper(0x63, 0);
+        self.updateGripper(self.gripperControl.grippers[2].nodeId, 0);
         self.emitStatus(`trim_stationary:1;trim_close:0;trim_open:0;`);
         break;
       }
