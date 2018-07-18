@@ -172,7 +172,7 @@ class Bridge extends EventEmitter
       grippers:         [
         {
           name:         "Gripper 1",
-          nodeId:       0x61,  // PRO4 packet ID
+          nodeId:       0x27,  // PRO4 packet ID
           state:        0      // 0 (stop), 2 (close), 3 (open)
         },
         {
