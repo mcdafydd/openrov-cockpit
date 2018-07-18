@@ -1400,8 +1400,8 @@ class Bridge extends EventEmitter
     let payload = new Buffer.allocUnsafe(p.lenBam);
 
     p.bamPayload.copy(payload);
-    payload.writeUInt16BE(value, 6);            // payload servo1
-    payload.writeUInt16BE(p.payloadServo2, 8);  // payload servo2
+    payload.writeUInt16LE(value, 6);            // payload servo1
+    payload.writeUInt16LE(p.payloadServo2, 8);  // payload servo2
     payload.writeUInt8(p.payloadGpio, 10);      // payload gpio
 
     // Generate new pro4 packet for each address and send to all modules
