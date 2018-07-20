@@ -109,7 +109,7 @@ class Bridge extends EventEmitter
       },
       pro4:             {
         pro4Sync:       pro4.constants.SYNC_REQUEST8LE,
-        pro4Addresses:  [0x31,0x32,0x33,0x41,0x42,0x43],
+        pro4Addresses:  [42, 51, 52], // 41, 43, 53, 54, 55; 64 spare address
         flags:          0x00,       // or 0x80
         csrAddress:     0xf0,       // custom command address
         lenNoop:        6,          // no write, just read all values
@@ -140,7 +140,7 @@ class Bridge extends EventEmitter
       power:            0,          // 0 to 1
       pro4:             {
         pro4Sync:       pro4.constants.SYNC_REQUEST32LE,
-        pro4Addresses:  [64], // all updated at same time
+        pro4Addresses:  [65, 66], // all updated at same time
         flags:          2,          // defined by VideoRay
         csrAddress:     0,          // custom command address
         len:            4 * 3       // 3 led banks
@@ -172,23 +172,23 @@ class Bridge extends EventEmitter
       grippers:         [
         {
           name:         "Gripper 1",
-          nodeId:       0x27,  // PRO4 packet ID
+          nodeId:       24,  // PRO4 packet ID
           state:        0      // 0 (stop), 2 (close), 3 (open)
         },
         {
           name:         "Gripper 2 - water sampler",
-          nodeId:       0x62,   // PRO4 packet ID
+          nodeId:       23,   // PRO4 packet ID
           state:        0       // 0 (stop), 2 (close), 3 (open)
         },
         {
           name:         "Gripper 3 - trim",
-          nodeId:       0x63,  // PRO4 packet ID
+          nodeId:       21,  // PRO4 packet ID
           state:        0      // 0 (stop), 2 (close), 3 (open)
         }
       ],
       pro4:             {
         pro4Sync:       pro4.constants.SYNC_REQUEST8LE,
-        pro4Addresses:  [0x61, 0x62, 0x63], // all updated at same time
+        pro4Addresses:  [24, 23, 21], // all updated at same time
         flags:          0x80,  // defined by VideoRay
         csrAddress:     0,     // custom command address
         len:            1      // command payload is just a single byte
@@ -214,7 +214,7 @@ class Bridge extends EventEmitter
       motors:           [
         {
           name:         "aft vertical",
-          nodeId:       16,     // PRO4 packet ID
+          nodeId:       12,     // PRO4 packet ID
           motorId:      0,      // device protocol ID, position in PRO4 payload
           value:        0,      // thrust value (-1 to +1)
           reverse:      false,  // boolean
@@ -250,7 +250,7 @@ class Bridge extends EventEmitter
         },
         {
           name:         "thruster",
-          nodeId:       17,     // PRO4 packet ID
+          nodeId:       16,     // PRO4 packet ID
           motorId:      4,      // device protocol ID, position in PRO4 payload
           value:        0,      // thrust value (-1 to +1)
           reverse:      false,  // boolean
@@ -261,7 +261,7 @@ class Bridge extends EventEmitter
       pro4:             {
         pro4Sync:       pro4.constants.SYNC_REQUEST32LE,
         pro4Addresses:  [129],  // 129, multicast, see motors array above
-        //pro4Addresses:  [12, 13, 14, 15, 17],  // 129, multicast, see motors array above
+        //pro4Addresses:  [12, 13, 14, 15, 16],  // 129, multicast, see motors array above
         flags:          2,      // defined by VideoRay
         csrAddress:     0xf0,   // custom command address
         len:            2+4*5,   // 2 command bytes + 4 byte float * number of motors
