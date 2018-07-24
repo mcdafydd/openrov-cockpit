@@ -76,6 +76,8 @@ class Bridge extends EventEmitter
       time:             0,
       timeDelta_ms:     0,
       updateInterval:   1000,       // loop interval in ms
+      navInterval:      250,        // nav display update interval in ms
+      changed:          0,          // if <> 0 -> send nav update to browser next iteration
       ps:               {           // power supply
         brdvRampUp:   true,
         brdv:         5.0,
@@ -109,7 +111,7 @@ class Bridge extends EventEmitter
       },
       pro4:             {
         pro4Sync:       pro4.constants.SYNC_REQUEST8LE,
-        pro4Addresses:  [42, 51, 52], // 41, 43, 53, 54, 55; 64 spare address
+        pro4Addresses:  [42, 51, 52], // ps crumbs = 41, 43, camera crumbs = 53, 54, 55; 64 spare address
         flags:          0x00,       // or 0x80
         csrAddress:     0xf0,       // custom command address
         lenNoop:        6,          // no write, just read all values
@@ -281,6 +283,7 @@ class Bridge extends EventEmitter
 
     // Add SCINI device control interval functions
     self.sensorInterval = setInterval( function() { return self.requestSensors(); },          self.sensors.updateInterval );
+    self.navInterval = setInterval( function() { return self.updateNav(); },          self.sensors.navInterval );
     self.lightsInterval = setInterval( function() { return self.updateLights(); },       self.vehicleLights.updateInterval );
     self.motorInterval = setInterval( function() { return self.updateMotors(); },     self.motorControl.updateInterval );
     self.rotateMotorInterval = setInterval( function() { return self.rotateMotor(); },     self.motorControl.rotateInterval );
@@ -442,6 +445,7 @@ class Bridge extends EventEmitter
 
     // Remove status interval functions
     clearInterval( self.sensorInterval );
+    clearInterval( self.navInterval );
     clearInterval( self.lightsInterval );
     clearInterval( self.motorInterval );
     clearInterval( self.rotateInterval );
@@ -1424,47 +1428,47 @@ class Bridge extends EventEmitter
     // Update time
     self.sensors.time += self.sensors.timeDelta_ms;
 
+    // apply additional sensor transformations here, if needed
     self.sensors.depth.temp = p.kellerTemperature;
     self.sensors.depth.pressure = p.kellerPressure;
     self.sensors.imu.pitch = p.angle_y;
     self.sensors.imu.roll = p.angle_x;
-    self.sensors.imu.yaw = 0;  // needs work to handle drift
+    self.sensors.imu.yaw = 0;  // ignore yaw for now
 
-    let result = "";
-    // Handle imu mode for yaw/heading
-    if( self.sensors.imu.mode === 0 )
+    self.sensors.changed = 1;
+  }
+
+  // Send power supply values, IMU, depth sensors, etc. to browser
+  updateNav()
+  {
+    logger.debug('BRIDGE: Updating nav data');
+    let self = this;
+
+    if (self.sensors.changed)
     {
-      // GYRO mode
-      //result += 'imu_y:' + self.encode( normalizeAngle180( self.sensors.imu.yaw - self.sensors.imu.yawOffset ) ) + ';';
-      result += 'imu_y:' + self.encode( self.sensors.imu.yaw - self.sensors.imu.yawOffset ) + ';';
+      let result = "";
+      // Handle imu mode for yaw/heading
+      if(self.sensors.imu.mode === 0)
+      {
+        // GYRO mode
+        //result += 'imu_y:' + self.encode( normalizeAngle180( self.sensors.imu.yaw - self.sensors.imu.yawOffset ) ) + ';';
+        result += 'imu_y:' + self.encode(self.sensors.imu.yaw - self.sensors.imu.yawOffset) + ';';
+      }
+      else if(self.sensors.imu.mode === 1)
+      {
+        // MAG mode
+        result += 'imu_y:' + self.encode(self.sensors.imu.yaw) + ';';
+      }
+
+      // Create result string (Note: we don't bother to take into account water type or offsets w.r.t. temperature or pressure )
+      result += 'imu_p:' + self.encode(self.sensors.imu.pitch - self.sensors.imu.pitchOffset) + ';';
+      result += 'imu_r:' + self.encode(self.sensors.imu.roll - self.sensors.imu.rollOffset) + ';';
+      result += 'depth_d:' + self.encode(self.sensors.depth.depth - self.sensors.depth.depthOffset) + ';';
+      result += 'depth_t:' + self.encode(self.sensors.depth.temp) + ';';
+      result += 'depth_p:' + self.encode(self.sensors.depth.pressure) + ';';
+      self.emitStatus(result);
+      self.sensors.changed = 0;
     }
-    else if( self.sensors.imu.mode === 1 )
-    {
-      // MAG mode
-      result += 'imu_y:' + self.encode( self.sensors.imu.yaw ) + ';';
-    }
-
-    // Create result string (Note: we don't bother to take into account water type or offsets w.r.t. temperature or pressure )
-    result += 'imu_p:' + self.encode(self.sensors.imu.pitch - self.sensors.imu.pitchOffset)*Math.PI/180 + ';';
-    result += 'imu_r:' + self.encode(self.sensors.imu.roll - self.sensors.imu.rollOffset)*Math.PI/180 + ';';
-    result += 'depth_d:' + self.encode( self.sensors.depth.depth - self.sensors.depth.depthOffset ) + ';';
-    result += 'depth_t:' + self.encode( self.sensors.depth.temp ) + ';';
-    result += 'depth_p:' + self.encode( self.sensors.depth.pressure ) + ';';
-    self.emitStatus(result);
-
-    /*
-    // Create result string
-    result = "";
-    result += 'BT2I:' + self.sensors.ps.bt2i + ';';
-    result += 'BT1I:' + self.sensors.ps.bt1i + ';';
-    result += 'BRDV:' + self.sensors.ps.brdv + ';';
-    result += 'vout:' + self.sensors.ps.vout + ';';
-    result += 'iout:' + self.sensors.ps.iout + ';';
-    result += 'time:' + self.sensors.ps.time + ';';
-    result += 'baro_p:' + self.sensors.ps.baro_p + ';';
-    result += 'baro_t:' + self.sensors.ps.baro_t + ';';
-
-    self.emitStatus(result);*/
   }
 }
 
