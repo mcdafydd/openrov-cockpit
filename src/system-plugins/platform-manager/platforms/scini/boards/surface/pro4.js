@@ -146,7 +146,7 @@ class Pro4
     // VideoRay PRO4 light module response payload
     this.ParserGrippers = new Parser()
       .uint8('cmd')
-      .uint8('cmd')
+      .uint8('cmdStatus')
       .uint16be('lim_i')
       .uint16be('current')
       .uint16be('temp')
@@ -294,11 +294,6 @@ class Pro4
   {
     switch(this.parsedObj.id)
     {
-      case 11:
-      {
-        this.parsedObj.type = 'motors';
-        return(this.ParserMotors.parse(this.parsedObj.payload));
-      }
       case 12:
       {
         this.parsedObj.type = 'motors';
@@ -324,48 +319,17 @@ class Pro4
         this.parsedObj.type = 'motors';
         return(this.ParserMotors.parse(this.parsedObj.payload));
       }
-      case 17:
-      {
-        this.parsedObj.type = 'motors';
-        return(this.ParserMotors.parse(this.parsedObj.payload));
-      }
-      case 0x31:
-      {
-        this.parsedObj.type = 'sensors';
-        console.log(this.ParserBam.parse(this.parsedObj.payload));
-        return(this.ParserBam.parse(this.parsedObj.payload));
-      }
-      case 0x32:
+      case 42:
       {
         this.parsedObj.type = 'sensors';
         return(this.ParserBam.parse(this.parsedObj.payload));
       }
-      case 0x33:
+      case 51:
       {
         this.parsedObj.type = 'sensors';
         return(this.ParserBam.parse(this.parsedObj.payload));
       }
-      case 0x34:
-      {
-        this.parsedObj.type = 'sensors';
-        return(this.ParserBam.parse(this.parsedObj.payload));
-      }
-      case 0x41:
-      {
-        this.parsedObj.type = 'sensors';
-        return(this.ParserBam.parse(this.parsedObj.payload));
-      }
-      case 0x42:
-      {
-        this.parsedObj.type = 'sensors';
-        return(this.ParserBam.parse(this.parsedObj.payload));
-      }
-      case 0x43:
-      {
-        this.parsedObj.type = 'sensors';
-        return(this.ParserBam.parse(this.parsedObj.payload));
-      }
-      case 0x44:
+      case 52:
       {
         this.parsedObj.type = 'sensors';
         return(this.ParserBam.parse(this.parsedObj.payload));
@@ -390,17 +354,22 @@ class Pro4
         this.parsedObj.type = 'lights';
         return(this.ParserLights.parse(this.parsedObj.payload));
       }
-      case 0x61:
+      case 66:
+      {
+        this.parsedObj.type = 'lights';
+        return(this.ParserLights.parse(this.parsedObj.payload));
+      }
+      case 24:
       {
         this.parsedObj.type = 'gripper';
         return(this.ParserGrippers.parse(this.parsedObj.payload));
       }
-      case 0x62:
+      case 23:
       {
         this.parsedObj.type = 'waterSampler';
         return(this.ParserGrippers.parse(this.parsedObj.payload));
       }
-      case 0x63:
+      case 21:
       {
         this.parsedObj.type = 'trim';
         return(this.ParserGrippers.parse(this.parsedObj.payload));
