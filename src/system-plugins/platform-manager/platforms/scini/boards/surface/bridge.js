@@ -339,7 +339,7 @@ class Bridge extends EventEmitter
         {
           self.jobs[clientId].cb(); // advance queue
 
-          if (parsedObj.type == 'sensors')
+          if (parsedObj.type == 'pilot')
           {
             self.updateSensors(parsedObj); // handles IMU calculations and sending sensor data to cockpit
           }

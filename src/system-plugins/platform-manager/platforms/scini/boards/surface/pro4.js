@@ -331,7 +331,7 @@ class Pro4
       }
       case 52:
       {
-        this.parsedObj.type = 'sensors';
+        this.parsedObj.type = 'pilot';
         return(this.ParserBam.parse(this.parsedObj.payload));
       }
       case 61:
