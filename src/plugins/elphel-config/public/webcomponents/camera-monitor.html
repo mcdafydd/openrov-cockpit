@@ -1,0 +1,40 @@
+<link rel="import" href="../polymer/polymer.html">
+<link rel="import" href="../orov-behaviors/orov-behavior.html">
+<link rel="import" href="/components/video/orov-video.html">
+
+<dom-module name="camera-monitor">
+  <template>
+    <style>
+    </style>
+
+<div id="mainContent" class="full-height">
+    <div id="cameraVideo" class="full-height">
+      <orov-video id="camera1" border='1' style='width: 100%; height:100%; position:relative' location='forward' event-emitter="{{cockpitEventEmitter}}">
+      </orov-video>
+    </div>
+</div>
+  </template>
+  <script>
+    (function() {
+      var splitRegEx=new RegExp('\\\.|_', 'g');
+      Polymer({
+        is:'camera-monitor',
+        behaviors: [namespace('behaviors').oROVStandard],
+        ready: function () {
+          var self = this;
+          var size = function () {
+            var bodyWidth = $(self.$.cameraVideo).innerWidth();
+            var bodyHeight = $(self.$.cameraVideo).innerHeight();
+            var topBarHeight = $(self.$.newuiTopbar).innerHeight();
+            $(self.$.mainContent).width(bodyWidth);
+            $(self.$.cameraVideo).width($(self.$.mainContent).innerWidth());
+            $(self.$.cameraVideo).height(bodyHeight - topBarHeight);
+          };
+          size();
+          $(window).resize(size);
+        }
+      })
+    })();
+  </script>
+
+</dom-module>
