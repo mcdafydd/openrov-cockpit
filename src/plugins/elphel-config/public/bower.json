@@ -1,0 +1,20 @@
+{
+  "name": "public",
+  "homepage": "https://github.com/mcdafydd/openrov-cockpit",
+  "authors": [
+    "David McPike <7037366+mcdafydd@users.noreply.github.com>"
+  ],
+  "description": "",
+  "main": "",
+  "license": "MIT",
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests"
+  ],
+  "dependencies": {
+    "mousetrap-js": "^1.7.0"
+  }
+}
