@@ -1,7 +1,8 @@
 (function()
 {
     const Listener = require( 'Listener' );
-    const request = require( 'request' );
+    const request  = require( 'request' );
+    const mqtt     = require( 'mqtt' );
 
     class ElphelConfig
     {
@@ -14,6 +15,13 @@
 
             this.hasSaidHello = false;
 
+            // Mqtt info
+            this.mqttConnected = false;
+            this.mqttUri    = 'ws://127.0.0.1:3000';
+
+            // key = server port viewed by browser clients
+            // value = source IP address of image stream
+            this.cameraMap = {};
             var self = this;
 
             // Pre-define all of the event listeners here. We defer enabling them until later.
@@ -65,7 +73,7 @@
                     }
                 }),
 
-                resolution: new Listener( self.globalBus, 'plugin.elphel-config.resolution', false, function( powerIn )
+                resolution: new Listener( self.globalBus, 'plugin.elphel-config.resolution', false, function( cameraIp )
                 {
                     var command;
 
@@ -92,7 +100,7 @@
                     });
                 }),
 
-                quality: new Listener( self.globalBus, 'plugin.elphel-config.quality', false, function( powerIn )
+                quality: new Listener( self.globalBus, 'plugin.elphel-config.quality', false, function( cameraIp )
                 {
                     var command;
 
@@ -119,7 +127,7 @@
                     });
                 }),
 
-                exposure: new Listener( self.globalBus, 'plugin.elphel-config.exposure', false, function( powerIn )
+                exposure: new Listener( self.globalBus, 'plugin.elphel-config.exposure', false, function( cameraIp )
                 {
                     var command;
 
@@ -146,7 +154,7 @@
                     });
                 }),
 
-                snapFull: new Listener( self.globalBus, 'plugin.elphel-config.snapFull', false, function( powerIn )
+                snapFull: new Listener( self.globalBus, 'plugin.elphel-config.snapFull', false, function( cameraIp )
                 {
                     var command;
 
@@ -173,7 +181,7 @@
                     });
                 }),
 
-                sayHello: new Listener( self.cockpitBus, 'plugin.elphel-config.sayHello', false, function( powerIn )
+                sayHello: new Listener( self.cockpitBus, 'plugin.elphel-config.sayHello', false, function()
                 {
                     var command;
 
@@ -193,6 +201,112 @@
                     self.globalBus.emit( 'mcu.SendCommand', command );
                 })
             }
+
+            // Connect to MQTT broker and setup all event handlers
+            // This is used to publish camera settings to camera viewers for controls
+            this.client = mqtt.connect(this.mqttUri, {
+                protocolVersion: 4,
+                resubscribe: true,
+                will: {
+                    topic: 'status/openrov',
+                    payload: 'MJPEG-VIDEO-SERVER: OpenROV MQTT client disconnected!',
+                    qos: 0,
+                    retain: false
+                }
+            });
+
+            this.client.on('connect', () => {
+                this.mqttConnected = true;
+                deps.logger.debug('MJPEG-VIDEO-SERVER: MQTT broker connection established!');
+                this.client.subscribe('toCamera/#'); // receive all camera control requests
+            });
+
+            this.client.on('reconnect', () => {
+                this.mqttConnected = true;
+                deps.logger.debug('MJPEG-VIDEO-SERVER: MQTT broker re-connected!');
+            });
+
+            this.client.on('offline', () => {
+                this.mqttConnected = false;
+                deps.logger.debug('MJPEG-VIDEO-SERVER: MQTT broker connection offline!');
+            });
+
+            this.client.on('close', () => {
+                // connection state is also set to false in class close() method
+                this.mqttConnected = false;
+                deps.logger.debug('MJPEG-VIDEO-SERVER: MQTT broker connection closed!');
+            });
+
+            this.client.on('error', (err) => {
+                deps.logger.debug('MJPEG-VIDEO-SERVER: MQTT error: ', err);
+            });
+
+            this.client.on('message', (topic, message) => {
+                // handle Elphel camera control messages
+                if (topic.match('toCamera/820[0-9]/.*') !== null) {
+                    let command = topic.split('/');
+                    let port = command[1];
+                    let func = command[2];
+                    let cameraIp = this.cameraMap[port];
+                    let onBoardTemp = '/i2c.php?width=8&bus=1&adr=0x4800';
+                    // WOI_LEFT=100&WOI_TOP=300&WOI_WIDTH=800&WOI_HEIGHT=600&DCM_HOR=1&DCM_VER=1&BIN_HOR=1&BIN_VER=1
+                    let uri = `http://${cameraIp}/`;
+                    switch(func) {
+                        case 'exposure':
+                            if (message >= 10 && message <= 250)
+                                uri += `setparameters_demo.php?EXPOS=${message}`;
+                            else
+                                uri = 'ignore';
+                            break;
+                        case 'resolution':
+                            let valid = [1, 2, 4];
+                            if (valid.indexOf(message) > 0)
+                                uri += `setparameters_demo.php?DCM_HOR=${message}&DCM_VERT=${message}&BIN_HOR=${message}&BIN_VERT=${message}`;
+                            else
+                                uri = 'ignore';
+                            break;
+                        case 'quality':
+                            if (message >= 60 && message <= 100)
+                                uri += `setparameters_demo.php?QUALITY=${message}`;
+                            else
+                                uri = 'ignore';
+                            break;
+                        case 'color':
+                            if (message === 1 || message === 5)
+                                uri += `setparameters_demo.php?COLOR=${message}`;
+                            else
+                                uri = 'ignore';
+                            break;
+                        case 'snapFull':
+                            // request() will follow redirects by default
+                            uri += `snapfull.php`;
+                            request(uri, {encoding: 'binary'}, function(error, response, body) {
+                                fs.writeFile(`/opt/openrov/images/`, body, 'binary', function (err) {});
+                            });
+                            uri = 'ignore';
+                            break;
+                        default:
+                            uri = 'ignore';
+                            break;
+                    }
+                    switch(uri) {
+                        case 'ignore':
+                            break;
+                        default:
+                            request(uri, function (err, response, body) {
+                                deps.logger.debug('MJPEG-VIDEO-SERVER: request error:', err);
+                                deps.logger.debug('MJPEG-VIDEO-SERVER: request statusCode:', response && response.statusCode);
+                                deps.logger.debug('MJPEG-VIDEO-SERVER: body:', body);
+                            });
+                            break;
+                    }
+                }
+                else if (topic.match('toCamera/cameraRegistration') !== null)
+                {
+                    let val = message.split(':');
+                    this.cameraMap[val[0]] = val[1];
+                }
+            });
         }
 
         // This is automatically called when cockpit loads all of the plugins, and when a plugin is enabled
@@ -246,7 +360,7 @@
                       'title': 'JPEG Quality',
                       'description': 'Default Elphel camera sensor JPEG compression quality value',
                       'default': 90,
-                      'minimum': 70,
+                      'minimum': 60,
                       'maximum': 100
                   },
                   'resolution': {

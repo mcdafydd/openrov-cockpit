@@ -35,8 +35,6 @@
             {
                 keyboard:
                 {
-                    "alt+0": { type: "button",
-                               action: "plugin.example.sayHello"}
                 }
             };
         };

@@ -23,7 +23,7 @@
                         button:
                         {
                             down: function() {
-                                this.cockpit.rov.emit( 'plugin.elphel-config.resolution', 1 );
+                                self.cockpit.rov.emit( 'plugin.elphel-config.resolution', 1 );
                             }
                         }
                     }
@@ -36,7 +36,7 @@
                         button:
                         {
                             down: function() {
-                                this.cockpit.rov.emit( 'plugin.elphel-config.resolution', 2 );
+                                self.cockpit.rov.emit( 'plugin.elphel-config.resolution', 2 );
                             }
                         }
                     }
@@ -49,59 +49,59 @@
                         button:
                         {
                             down: function() {
-                                this.cockpit.rov.emit( 'plugin.elphel-config.resolution', 4 );
+                                self.cockpit.rov.emit( 'plugin.elphel-config.resolution', 4 );
                             }
                         }
                     }
                 },
                 "plugin.elphel-config.quality70":
                 {
-                    description: "Take full resolution snapshot",
+                    description: "Set JPEG quality to 70%",
                     controls:
                     {
                         button:
                         {
                             down: function() {
-                                this.cockpit.rov.emit( 'plugin.elphel-config.quality', 70 );
+                                self.cockpit.rov.emit( 'plugin.elphel-config.quality', 70 );
                             }
                         }
                     }
                 },
                 "plugin.elphel-config.quality80":
                 {
-                    description: "Take full resolution snapshot",
+                    description: "Set JPEG quality to 80%",
                     controls:
                     {
                         button:
                         {
                             down: function() {
-                                this.cockpit.rov.emit( 'plugin.elphel-config.quality', 80 );
+                                self.cockpit.rov.emit( 'plugin.elphel-config.quality', 80 );
                             }
                         }
                     }
                 },
                 "plugin.elphel-config.quality90":
                 {
-                    description: "Take full resolution snapshot",
+                    description: "Set JPEG quality to 90%",
                     controls:
                     {
                         button:
                         {
                             down: function() {
-                                this.cockpit.rov.emit( 'plugin.elphel-config.quality', 90 );
+                                self.cockpit.rov.emit( 'plugin.elphel-config.quality', 90 );
                             }
                         }
                     }
                 },
                 "plugin.elphel-config.quality100":
                 {
-                    description: "Take full resolution snapshot",
+                    description: "Set JPEG quality to 100%",
                     controls:
                     {
                         button:
                         {
                             down: function() {
-                                this.cockpit.rov.emit( 'plugin.elphel-config.quality', 100 );
+                                self.cockpit.rov.emit( 'plugin.elphel-config.quality', 100 );
                             }
                         }
                     }
@@ -114,7 +114,7 @@
                         button:
                         {
                             down: function() {
-                                this.cockpit.rov.emit( 'plugin.elphel-config.exposure', 1 );
+                                self.cockpit.rov.emit( 'plugin.elphel-config.exposure', 1 );
                             }
                         }
                     }
@@ -127,7 +127,7 @@
                         button:
                         {
                             down: function() {
-                                this.cockpit.rov.emit( 'plugin.elphel-config.exposure', -1 );
+                                self.cockpit.rov.emit( 'plugin.elphel-config.exposure', -1 );
                             }
                         }
                     }
@@ -140,7 +140,7 @@
                         button:
                         {
                             down: function() {
-                                this.cockpit.rov.emit( 'plugin.elphel-config.snapFull' );
+                                self.cockpit.rov.emit( 'plugin.elphel-config.snapFull' );
                             }
                         }
                     }
@@ -168,7 +168,11 @@
                                action: "plugin.elphel-config.quality100"},
                     "+":       { type: "button",
                                action: "plugin.elphel-config.exposureAdd"},
+                    "=":       { type: "button",
+                               action: "plugin.elphel-config.exposureAdd"},
                     "_":       { type: "button",
+                               action: "plugin.elphel-config.exposureSubtract"},
+                    "-":       { type: "button",
                                action: "plugin.elphel-config.exposureSubtract"},
                     "space":   { type: "button",
                                action: "plugin.elphel-config.snapFull"}
@@ -179,7 +183,7 @@
         sayHello()
         {
           // Send the sayHello command to the node plugin
-          this.cockpit.rov.emit( 'plugin.elphel-config.sayHello' );
+          this.cockpit.emit( 'plugin.elphel-config.sayHello' );
         }
 
         getTelemetryDefinitions()
@@ -197,23 +201,23 @@
             var self = this;
 
             // Listen for settings from the node plugin
-            this.cockpit.rov.withHistory.on('plugin.elphel-config.settingsChange', function(settings)
+            this.cockpit.withHistory.on('plugin.elphel-config.settingsChange', function(settings)
             {
                 // Copy settings
                 self.settings = settings;
 
                 // Re-emit on cockpit
-                self.cockpit.emit( 'plugin.elphel-config.settingsChange', settings );
+                self.cockpit.rov.emit( 'plugin.elphel-config.settingsChange', settings );
             });
 
             // Listen for response messages from the Node plugin
-            this.cockpit.rov.withHistory.on('plugin.elphel-config.message', function( message )
+            this.cockpit.withHistory.on('plugin.elphel-config.message', function( message )
             {
                 // Log the message!
                 console.log( "ElphelConfig Plugin says: " + message );
 
                 // Rebroadcast for other plugins and widgets in the browser
-                self.cockpit.emit( 'plugin.elphel-config.message', message );
+                self.cockpit.rov.emit( 'plugin.elphel-config.message', message );
             });
 
             // Listen for sayHello requests from other plugins and widgets
