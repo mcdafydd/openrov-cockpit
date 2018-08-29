@@ -158,12 +158,12 @@
                 {
                     logger.info('Stream Registration: ' + JSON.stringify(info) );
 
-                    this.globalBus.emit( 'CameraRegistration', 
+                    this.globalBus.emit( 'CameraRegistration',
                     {
-                        location:           "forward",               // TODO: Lookup location based on serial ID
+                        location:           serial == 'pilot' ? "forward" : "other",               // TODO: Lookup location based on serial ID
                         videoMimeType: 		"video/x-motion-jpeg",
                         resolution:         info.resolution,
-                        framerate:          info.framerate, 
+                        framerate:          info.framerate,
                         wspath:             "",
                         relativeServiceUrl: `:${info.port}`,
                         sourcePort:         info.port,
@@ -252,19 +252,26 @@
                         ],
                         'title': 'Resolution',
                         'default': '800x600'
-                    }                    
+                    },
+                    'record':
+                    {
+                        'type': 'boolean',
+                        'title': 'RecordOnServer',
+                        'default': false
+                    }
                 },
 
-                'required': 
+                'required':
                 [
                     'framerate',    // Framerate setting for camera
-                    'resolution'    // Resolution setting for camera
+                    'resolution',    // Resolution setting for camera
+                    'record'
                 ]
             }];
         }
     }
 
-    module.exports = function( name, deps ) 
+    module.exports = function( name, deps )
     {
         if( process.env.PRODUCTID == "trident" )
         {
