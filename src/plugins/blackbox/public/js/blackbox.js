@@ -154,6 +154,14 @@
     });
     this.cockpit.on('plugin-blackbox-recording-start', function () {
       self.startRecording();
+      // SCINI: signal mjpg_streamer to start recording
+      let camSettings = {
+          framerate: 30,
+          resolution: "1280x720",
+          record: true
+          };
+      self.cockpit.rov.emit('settings-change.videosettings', camSettings);
+
     });
     this.cockpit.on('plugin-blackbox-sync-session', function (sessionID) {
       self.syncSession(sessionID);
@@ -163,6 +171,13 @@
     });
     this.cockpit.on('plugin-blackbox-recording-stop', function () {
       self.stopRecording();
+      // SCINI: signal mjpg_streamer to start recording
+      let camSettings = {
+        framerate: 30,
+        resolution: "1280x720",
+        record: false
+        };
+    self.cockpit.rov.emit('settings-change.mjpegVideo', camSettings);
     });
     this.cockpit.on('plugin-blackbox-get-sessions', function (callback) {
       self.recordedSessions(function(recordedSessions){
@@ -176,7 +191,7 @@
         fn(self.recording);
       }
     });
-    
+
     setInterval(function () {
       var sessions = self.sessions_cache;
       //plugin-blackbox-sync-sessions
@@ -206,10 +221,10 @@
         self.currentRecording(function(currentSession){
           if (currentSession){
             recordedSessions.push(currentSession);
-          } 
+          }
           self.cockpit.emit('plugin-blackbox-sessions', recordedSessions);
         })
-      });    
+      });
   }
 
   Blackbox.prototype.currentRecording = function currentRecording(callback) {
@@ -243,7 +258,7 @@
     });
 
   }
-  
+
 
   //TODO: Add sessions collection that each unique session is placed
   var _recordedSessions = function _recordedSessions(idb, currentSession, callback) {
@@ -283,7 +298,7 @@
               return item.event == 'x-h264-video.data';
             })
             .each(function(item,cursor){
-              //Each uses side effects to change state. 
+              //Each uses side effects to change state.
               var converted = new Uint8Array(item.data);
               sizeofData += converted.length;
               arrayOfData.push( {
@@ -614,7 +629,7 @@
           i++;
         });
       }
-      
+
     }.bind(null, options.collection));
   };
 
@@ -632,7 +647,7 @@
           save=callback;
 //          save(new Uint8Array(initFrame.data),function(){
             resolve(self.idb.sessions.where('sessionID').equals(options.sessionID).first());
-//          });          
+//          });
         })
     })
     .then(function (session) {
@@ -649,7 +664,7 @@
             return new Promise(function(resolve,reject){
               save(new Uint8Array(videoItem.data),function(){
                 resolve();
-              }); 
+              });
             })
           })
         })
