@@ -2,7 +2,6 @@
 
 <link rel="import" href="components/new-ui/time.html">
 <link rel="import" href="components/new-ui/time-slim.html">
-<link rel="import" href="components/new-ui/compass.html">
 <link rel="import" href="components/new-ui/depth.html">
 <link rel="import" href="components/new-ui/throttle.html">
 <link rel="import" href="components/new-ui/switches.html">
@@ -64,10 +63,6 @@
                 </orov-video>
             </div>
             <div id="newuiControlpad">
-                <fieldset>
-                    <legend>{{__('Heading')}}</legend>
-                    <orov-newui-compass class="center" heading="0" event-emitter="{{cockpitEventEmitter}}"></orov-newui-compass>
-                </fieldset>
                 <fieldset style="padding-bottom: 2em">
                     <legend>{{__('Depth')}}</legend>
                     <orov-newui-depth id="newui-depth" style="margin-top: 2.0em;" class="center control" event-emitter="{{cockpitEventEmitter}}"></orov-newui-depth>
