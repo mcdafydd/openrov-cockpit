@@ -187,18 +187,27 @@
                 temp: new Listener( self.cockpitBus, 'plugin.elphel-config.temp', false, function( cameraIp )
                 {
                     let onBoardTemp = 'i2c.php?width=8&bus=1&adr=0x4800';
+                    let port = 'unknown';
                     // Send command to camera
                     if (cameraIp === 'pilot')
                         cameraIp = process.env['EXTERNAL_CAM_IP'];
+                    if (cameraMap.hasOwnProperty(cameraIp)) {
+                        port = cameraMap[cameraIp].port;
+                    }
+                    let prop = `camTemp.${port}`;
+                    let statusobj = {};
                     request(`http://${cameraIp}/${onBoardTemp}`, function (err, response, body) {
                         if (response && response.statusCode == 200) {
                             parseString(body, function (err, result) {
                                 if (result) {
                                     deps.logger.debug(`ELPHEL-CONFIG: Onboard temperature ${result.i2c.data} on camera ${cameraIp}`);
                                     // Emit temperature and camera ID to telemetry plugin
-                                    self.globalBus.emit('mcu.status', { `camTemp.${cameraIp}`:`${result.i2c.data}C` });
+                                    statusobj[prop] = result.i2c.data + 'C';
+                                    self.globalBus.emit('mcu.status', statusobj);
                                 }
                                 else if (err) {
+                                    statusobj[prop] = 'nodata';
+                                    self.globalBus.emit('mcu.status', statusobj);
                                     deps.logger.debug(`ELPHEL-CONFIG: Onboard temperature request parsing error: ${err}`);
                                 }
                             });
