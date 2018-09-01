@@ -661,7 +661,7 @@ class Pro4
         chksum ^= buf[i];
       }
       buf.writeUInt8(chksum, this.constants.PROTOCOL_PRO4_HEADER_SIZE);
-      logger.debug('PRO4: My crc8 total = ' + chksum.toString(16));;
+      logger.debug('PRO4: My crc8 header = ' + chksum.toString(16));;
     }
 
     if (payload != 0)

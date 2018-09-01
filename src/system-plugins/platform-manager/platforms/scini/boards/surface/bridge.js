@@ -31,22 +31,12 @@
   POSSIBILITY OF SUCH DAMAGE.
 */
 
-/*
-
-Example OpenROV strings to convert to PRO4 not yet integrated
-
-START  camServ_inv(0);
-START  depth_water(0);
-START  imu_level(0,0);
-START  wake();
-
-*/
 const mqtt          = require('mqtt');
 const EventEmitter  = require('events').EventEmitter;
 const logger        = require('AppFramework.js').logger;
 const pro4          = require('./pro4');
 const q             = require('queue');
-const StateMachine  = require('javascript-state-machine');
+const request       = require('request');
 
 class Bridge extends EventEmitter
 {
@@ -330,13 +320,15 @@ class Bridge extends EventEmitter
       // message is a Buffer object, send to decoder
       logger.debug('BRIDGE: Received MQTT on topic ' + topic);
       logger.warn('BRIDGE: Raw MQTT message = ' + message.toString('hex'));
+
       // use client-specific topic and pass handling to appropriate parser
       let clientId = topic.split('/', 2)[1];
       // only send messages from elphel gateways to parser
-      if (clientId.match('elphel-.*')) {
+      if (clientId.match('elphel.*') !== null) {
         let parsedObj = self.parser.parse(message);
         if (parsedObj.status == pro4.constants.STATUS_SUCCESS)
         {
+          logger.debug('BRIDGE: Successfully parsed ROV PRO4 packet, advancing job queue; message = ', message.toString('hex'));
           self.jobs[clientId].cb(); // advance queue
 
           if (parsedObj.type == 'pilot')
@@ -385,10 +377,11 @@ class Bridge extends EventEmitter
       logger.debug('BRIDGE: MQTT broker connection closed!');
     });
 
-    self.globalBus.on('plugin.mqttBroker.clientConnected', (clientId) => {
+    self.globalBus.on('plugin.mqttBroker.clientConnected', (client) => {
+      let clientId = client.id;
       logger.debug('BRIDGE: Received MQTT clientConnected() from ' + clientId);
       // create new message queue for each ROV MQTT gateway
-      if (clientId.match('elphel.*')) {
+      if (clientId.match('elphel.*') !== null) {
         // create new state machine, parse buffer, and job queue
         // concurrency = 1 (one message in flight at a time)
         // max wait time for response = 20ms
@@ -398,7 +391,12 @@ class Bridge extends EventEmitter
         self.clients[clientId].bufIdx = 0; // points to end of received data in parseBuffer
         self.clients[clientId].parseIdx = 0; // points to current parser index
         self.clients[clientId].parseBuffer = new Buffer.alloc(1024);
-        self.results[clientId] = [];
+        self.results[clientId] = new q({
+                                      concurrency: 1,
+                                      timeout: 25,
+                                      autostart: true,
+                                      results: self.results[clientId]
+                                    });
         self.jobs[clientId] = new q({
                                       concurrency: 1,
                                       timeout: 25,
@@ -421,11 +419,12 @@ class Bridge extends EventEmitter
         });
       }
     });
-    self.globalBus.on('plugin.mqttBroker.clientDisconnected', (clientId) => {
+    self.globalBus.on('plugin.mqttBroker.clientDisconnected', (client) => {
+      let clientId = client.id;
       logger.debug('BRIDGE: Received MQTT clientDisconnected() from ' + clientId);
       // stop and empty queue
       if (typeof(clientId) != 'undefined') {
-        if (clientId.match('elphel.*')) {
+        if (clientId.match('elphel.*') !== null) {
           self.results[clientId] = [];
           self.jobs[clientId].end();
         }
@@ -459,7 +458,7 @@ class Bridge extends EventEmitter
     // stop and empty job queues
     logger.debug('BRIDGE: Empty and stop MQTT client job queues');
     // stop and empty queue
-    if (clientId.match('elphel.*')) {
+    if (clientId.match('elphel.*') !== null) {
       self.results[clientId] = [];
       self.jobs[clientId].end();
     }
@@ -1086,14 +1085,21 @@ class Bridge extends EventEmitter
     self.emitStatus('cmd:' + command);
   }
 
-  addToQueue ( packetBuf )
+  addToPublishQueue ( packetBuf )
   {
     let self = this;
-    // keep it simple - add packetBuf to each client queue (queues only get created on elphels)
+    // keep it simple - add packetBuf to each client queue (queues only get created on one gateway per serial bus)
     for ( let clientId in self.jobs ) {
       let cb = self.jobs[clientId].cb;
       self.jobs[clientId].push(function (cb) { return self.sendToMqtt(clientId, packetBuf); });
     }
+  }
+
+  addToParseQueue ( clientId, packetBuf )
+  {
+    let self = this;
+    let cb = self.results[clientId].cb;
+    self.results[clientId].push(function (cb) { return self.parser.parse(packetBuf); });
   }
 
   sendToMqtt ( clientId, packetBuf )
@@ -1238,7 +1244,7 @@ class Bridge extends EventEmitter
         // Packet len = Header + 4-byte CRC + payload + 4-byte CRC = 27
         let packetBuf = self.parser.encode(p.pro4Sync, p.pro4Addresses[j], p.flags, p.csrAddress, p.len, payload);
         // maintain light state by updating at least once per second
-        self.addToQueue(packetBuf);
+        self.addToPublishQueue(packetBuf);
       })();
     }
 
@@ -1249,7 +1255,7 @@ class Bridge extends EventEmitter
         // Packet len = Header + 4-byte CRC + payload + 4-byte CRC = 27
         let packetBuf = self.parser.encode(p2.pro4Sync, p2.pro4Addresses[j], p2.flags, p2.csrAddress, p2.len, clumpPayload);
         // maintain light state by updating at least once per second
-        self.addToQueue(packetBuf);
+        self.addToPublishQueue(packetBuf);
       })();
     }
 
@@ -1289,7 +1295,7 @@ class Bridge extends EventEmitter
       // first address in array is a multicast group
       packetBuf = self.parser.encode(p.pro4Sync, p.pro4Addresses[0], p.flags, p.csrAddress, p.len, payload);
       // maintain state by updating at least once per second
-      self.addToQueue(packetBuf);
+      self.addToPublishQueue(packetBuf);
     }
     else {
       // first address in array is not multicast
@@ -1300,7 +1306,7 @@ class Bridge extends EventEmitter
           // Packet len = Header + 4-byte CRC + payload + 4-byte CRC = 27
           packetBuf = self.parser.encode(p.pro4Sync, m[j].nodeId, p.flags, p.csrAddress, p.len, payload);
           // maintain light state by updating at least once per second
-          self.addToQueue(packetBuf);
+          self.addToPublishQueue(packetBuf);
         })();
       }
     }
@@ -1346,7 +1352,7 @@ class Bridge extends EventEmitter
         // Packet len = 6-byte header + 1-byte CRC = 7
         let packetBuf = self.parser.encode(p.pro4Sync, g[j].nodeId, p.flags, p.csrAddress, 0, 0);
         // maintain state by updating at least once per second
-        self.addToQueue(packetBuf);
+        self.addToPublishQueue(packetBuf);
       })();
     }
   }
@@ -1365,7 +1371,7 @@ class Bridge extends EventEmitter
     payload.writeUInt8(command, 0);   // gripper command
     let packetBuf = self.parser.encode(p.pro4Sync, id, p.flags, p.csrAddress, p.len, payload);
     // maintain state by updating at least once per second
-    self.addToQueue(packetBuf);
+    self.addToPublishQueue(packetBuf);
   }
 
   // send crumb644 sensor request
@@ -1386,7 +1392,7 @@ class Bridge extends EventEmitter
         let j = i;  // loop closure
         // Packet len = Header + 1-byte CRC + payload + 1-byte CRC = 14
         let packetBuf = self.parser.encode(p.pro4Sync, p.pro4Addresses[j], p.flags, p.csrAddress, p.lenNoop, p.noopPayload);
-        self.addToQueue(packetBuf);
+        self.addToPublishQueue(packetBuf);
       })();
     }
 
@@ -1414,7 +1420,7 @@ class Bridge extends EventEmitter
         let j = i;  // loop closure
         // Packet len = Header + 1-byte CRC + payload + 1-byte CRC = 14
         let packetBuf = self.parser.encode(p.pro4Sync, p.pro4Addresses[j], p.flags, p.csrAddress, p.lenBam, payload);
-        self.addToQueue(packetBuf);
+        self.addToPublishQueue(packetBuf);
       })();
     }
   }
@@ -1425,12 +1431,16 @@ class Bridge extends EventEmitter
     logger.debug('BRIDGE: Updating sensors');
     let self = this;
     let p = parsedObj.device;
+    let density = 1024; // kg/m^3
+    let gravity = 9.80665; // m/s^2 - should add local gravity anomaly
+    let depth = p.kellerPressure/(density*gravity); // assumes pressure in pascals
     // Update time
     self.sensors.time += self.sensors.timeDelta_ms;
 
     // apply additional sensor transformations here, if needed
     self.sensors.depth.temp = p.kellerTemperature;
     self.sensors.depth.pressure = p.kellerPressure;
+    self.sensors.depth.depth = depth;
     self.sensors.imu.pitch = p.angle_y;
     self.sensors.imu.roll = p.angle_x;
     self.sensors.imu.yaw = 0;  // ignore yaw for now
