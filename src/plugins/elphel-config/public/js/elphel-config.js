@@ -23,7 +23,7 @@
                         button:
                         {
                             down: function() {
-                                self.cockpit.rov.emit( 'plugin.elphel-config.resolution', 1 );
+                                self.cockpit.rov.emit( 'plugin.elphel-config.resolution', 'pilot', 1 );
                             }
                         }
                     }
@@ -36,7 +36,7 @@
                         button:
                         {
                             down: function() {
-                                self.cockpit.rov.emit( 'plugin.elphel-config.resolution', 2 );
+                                self.cockpit.rov.emit( 'plugin.elphel-config.resolution', 'pilot', 2 );
                             }
                         }
                     }
@@ -49,7 +49,7 @@
                         button:
                         {
                             down: function() {
-                                self.cockpit.rov.emit( 'plugin.elphel-config.resolution', 4 );
+                                self.cockpit.rov.emit( 'plugin.elphel-config.resolution', 'pilot', 4 );
                             }
                         }
                     }
@@ -62,7 +62,7 @@
                         button:
                         {
                             down: function() {
-                                self.cockpit.rov.emit( 'plugin.elphel-config.quality', 70 );
+                                self.cockpit.rov.emit( 'plugin.elphel-config.quality', 'pilot', 70 );
                             }
                         }
                     }
@@ -75,7 +75,7 @@
                         button:
                         {
                             down: function() {
-                                self.cockpit.rov.emit( 'plugin.elphel-config.quality', 80 );
+                                self.cockpit.rov.emit( 'plugin.elphel-config.quality', 'pilot', 80 );
                             }
                         }
                     }
@@ -88,7 +88,7 @@
                         button:
                         {
                             down: function() {
-                                self.cockpit.rov.emit( 'plugin.elphel-config.quality', 90 );
+                                self.cockpit.rov.emit( 'plugin.elphel-config.quality', 'pilot', 90 );
                             }
                         }
                     }
@@ -101,7 +101,7 @@
                         button:
                         {
                             down: function() {
-                                self.cockpit.rov.emit( 'plugin.elphel-config.quality', 100 );
+                                self.cockpit.rov.emit( 'plugin.elphel-config.quality', 'pilot', 100 );
                             }
                         }
                     }
@@ -114,7 +114,7 @@
                         button:
                         {
                             down: function() {
-                                self.cockpit.rov.emit( 'plugin.elphel-config.exposure', 1 );
+                                self.cockpit.rov.emit( 'plugin.elphel-config.exposure', 'pilot', 1 );
                             }
                         }
                     }
@@ -127,7 +127,7 @@
                         button:
                         {
                             down: function() {
-                                self.cockpit.rov.emit( 'plugin.elphel-config.exposure', -1 );
+                                self.cockpit.rov.emit( 'plugin.elphel-config.exposure', 'pilot', -1 );
                             }
                         }
                     }
@@ -140,7 +140,8 @@
                         button:
                         {
                             down: function() {
-                                self.cockpit.rov.emit( 'plugin.elphel-config.snapFull' );
+                                self.cockpit.emit( 'plugin.elphel-config.snapFull', 'pilot' );
+                                self.cockpit.rov.emit( 'plugin.elphel-config.snapFull', 'pilot' );
                             }
                         }
                     }

@@ -3,6 +3,7 @@
     const Listener = require( 'Listener' );
     const request  = require( 'request' );
     const mqtt     = require( 'mqtt' );
+    const parseString = require('xml2js').parseString;
 
     class ElphelConfig
     {
@@ -15,14 +16,19 @@
 
             this.hasSaidHello = false;
 
+            let self = this;
+
             // Mqtt info
             this.mqttConnected = false;
             this.mqttUri    = 'ws://127.0.0.1:3000';
 
-            // key = server port viewed by browser clients
-            // value = source IP address of image stream
+            // holds camera settings from mjpeg-video-server
             this.cameraMap = {};
-            var self = this;
+
+            // camera defaults to send on mqtt clientConnect
+            this.quality = 90; // 90% JPEG compression
+            this.exposure = 50000; // in microseconds
+            this.resolution = 1; // 1/n resolution
 
             // Pre-define all of the event listeners here. We defer enabling them until later.
             // Look at src/libs/Listener.js to see how these work.
@@ -33,10 +39,6 @@
                 {
                     // Apply settings
                     self.settings = settings['elphel-config'];
-                    self.quality = self.settings.jpgQuality;
-                    self.exposure = self.settings.exposureMillis;
-                    self.resolution = self.settings.resolution;
-                    self.ae = self.settings.autoExposure;
 
                     // Emit settings update to cockpit
                     self.cockpitBus.emit( 'plugin.elphel-config.settingsChange', self.settings );
@@ -45,10 +47,11 @@
                 // Listener for MQTT clientConnected
                 clientConnected: new Listener( self.globalBus, 'plugin.mqttBroker.clientConnected', true, function( client )
                 {
+                    // if camera connect to MQTT broker, send normal defaults one time
                     if (client.id.match('elphel.*') !== null) {
                         let cameraIp = client.connection.stream.remoteAddress;
                         deps.logger.debug(`ELPHEL-CONFIG: New camera joined at IP address ${cameraIp}`);
-                        request(`http://${cameraIp}/camvc.php?set=0/comp_run:stop/ae:${self.ae}/iq:${self.quality}/e:${self.exposure}/bh:${self.resolution}/bv:${self.resolution}/dh:${self.resolution}/dv:${self.resolution}/comp_run:run`, function (err, response, body) {
+                        request(`http://${cameraIp}/setparameters_demo.php?AUTOEXP_ON=0&WB_EN=0&QUALITY=${self.quality}&EXPOS=${self.exposure}&BCH_HOR=${self.resolution}&BIN_VERT=${self.resolution}&DCM_HOR=${self.resolution}&DCM_VERT=${self.resolution}`, function (err, response, body) {
                             if (response && response.statusCode == 200) {
                                 deps.logger.debug(`ELPHEL-CONFIG: Default settings set on camera ${cameraIp}`);
                             }
@@ -73,110 +76,135 @@
                     }
                 }),
 
-                resolution: new Listener( self.globalBus, 'plugin.elphel-config.resolution', false, function( cameraIp )
+                resolution: new Listener( self.cockpitBus, 'plugin.elphel-config.resolution', false, function( cameraIp, resolution )
                 {
-                    var command;
-
-                    // Create a command in the format "command( parameters )"
-                    if( self.hasSaidHello )
-                    {
-                      command = 'ex_hello(' + 0 + ')';
-                      self.hasSaidHello = false;
+                    let valid = [1, 2, 4];
+                    if (valid.indexOf(message) > 0) {
+                        // Send command to camera
+                        if (cameraIp === 'pilot')
+                            cameraIp = process.env['EXTERNAL_CAM_IP'];
+                        request(`http://${cameraIp}/setparameters_demo.php?BCH_HOR=${self.resolution}&BIN_VERT=${self.resolution}&DCM_HOR=${self.resolution}&DCM_VERT=${self.resolution}`, function (err, response, body) {
+                            if (response && response.statusCode == 200) {
+                                deps.logger.debug(`ELPHEL-CONFIG: Set resolution 1/${resolution} on camera ${cameraIp}`);
+                            }
+                            if (err) {
+                                deps.logger.debug(`ELPHEL-CONFIG: Setting resolution on camera ${cameraIp} failed with error: ${err}`);
+                            }
+                        });
                     }
-                    else
-                    {
-                      command = 'ex_hello(' + 1 + ')';
-                      self.hasSaidHello = true;
+                    else {
+                        deps.logger.debug(`ELPHEL-CONFIG: Invalid resolution value 1/${resolution} for camera ${cameraIp} - ignoring`);
                     }
+                }),
 
+                quality: new Listener( self.cockpitBus, 'plugin.elphel-config.quality', false, function( cameraIp, quality )
+                {
+                    if (message >= 60 && message <= 100) {
+                        // Send command to camera
+                        if (cameraIp === 'pilot')
+                            cameraIp = process.env['EXTERNAL_CAM_IP'];
+                        request(`http://${cameraIp}/setparameters_demo.php?QUALITY=${quality}`, function (err, response, body) {
+                            if (response && response.statusCode == 200) {
+                                deps.logger.debug(`ELPHEL-CONFIG: Setting JPEG quality ${quality}% on camera ${cameraIp}`);
+                            }
+                            if (err) {
+                                deps.logger.debug(`ELPHEL-CONFIG: Setting JPEG quality on camera ${cameraIp} failed with error: ${err}`);
+                            }
+                        });
+                    }
+                    else {
+                        deps.logger.debug(`ELPHEL-CONFIG: Invalid exposure value ${quality}% for camera ${cameraIp} - ignoring`);
+                    }
+                }),
+
+                exposure: new Listener( self.cockpitBus, 'plugin.elphel-config.exposure', false, function( cameraIp, exposure )
+                {
+                    if (exposure >= 10 && exposure <= 250) {
+                        // Send command to camera
+                        if (cameraIp === 'pilot')
+                            cameraIp = process.env['EXTERNAL_CAM_IP'];
+                        request(`http://${cameraIp}/setparameters_demo.php?EXPOS=${exposure}`, function (err, response, body) {
+                            if (response && response.statusCode == 200) {
+                                deps.logger.debug(`ELPHEL-CONFIG: Setting exposure ${exposure}ms on camera ${cameraIp}`);
+                            }
+                            if (err) {
+                                deps.logger.debug(`ELPHEL-CONFIG: Setting exposure on camera ${cameraIp} failed with error: ${err}`);
+                            }
+                        });
+                    }
+                    else {
+                        deps.logger.debug(`ELPHEL-CONFIG: Invalid exposure value ${exposure}ms for camera ${cameraIp} - ignoring`);
+                    }
+                }),
+
+                snapFull: new Listener( self.cockpitBus, 'plugin.elphel-config.snapFull', false, function( cameraIp )
+                {
                     // Send command to camera
-                    request(`http://${cameraIp}/camvc.php?set=0/comp_run:stop/ae:${self.ae}/iq:${self.quality}/e:${self.exposure}/bh:${self.resolution}/bv:${self.resolution}/dh:${self.resolution}/dv:${self.resolution}/comp_run:run`, function (err, response, body) {
+                    if (cameraIp === 'pilot') {
+                        cameraIp = process.env['EXTERNAL_CAM_IP'];
+                    }
+                    let filename = new Date();
+                    let ts = this.cameraMap[cameraIp].ts;
+                    let id = this.cameraMap[cameraIp].id;
+
+                    // request() will follow redirects by default
+                    let uri = `http://${cameraIp}/snapfull.php`;
+                    request(uri, {encoding: 'binary'}, function(error, response, body) {
                         if (response && response.statusCode == 200) {
-                            deps.logger.debug(`ELPHEL-CONFIG: Default settings set on camera ${cameraIp}`);
+                            deps.logger.debug(`ELPHEL-CONFIG: Snapped full resolution image from camera ${cameraIp}`);
+                            fs.writeFile(`/opt/openrov/images/${ts}/${id}/${filename.toISOString()}_full.jpg`, body, 'binary', function (err) {
+                                deps.logger.info(`ELPHEL-CONFIG: Error trying to write snapFull request on camera ${cameraIp} error: ${err}`);
+                            });
                         }
                         if (err) {
                             deps.logger.debug('ELPHEL-CONFIG: Setting defaults failed with error:', err);
                         }
                     });
+
                 }),
 
-                quality: new Listener( self.globalBus, 'plugin.elphel-config.quality', false, function( cameraIp )
+                color: new Listener( self.cockpitBus, 'plugin.elphel-config.color', false, function( cameraIp, color )
                 {
-                    var command;
-
-                    // Create a command in the format "command( parameters )"
-                    if( self.hasSaidHello )
-                    {
-                      command = 'ex_hello(' + 0 + ')';
-                      self.hasSaidHello = false;
+                    if (color === 1 || color === 5) {
+                        let colorText = color === 1 ? 'normal' : 'raw';
+                        // Send command to camera
+                        if (cameraIp === 'pilot')
+                            cameraIp = process.env['EXTERNAL_CAM_IP'];
+                        request(`http://${cameraIp}/setparameters_demo.php?COLOR=${color}`, function (err, response, body) {
+                            if (response && response.statusCode == 200) {
+                                deps.logger.debug(`ELPHEL-CONFIG: Set color ${colorText} on camera ${cameraIp}`);
+                            }
+                            if (err) {
+                                deps.logger.debug(`ELPHEL-CONFIG: Setting color on camera ${cameraIp} failed with error: ${err}`);
+                            }
+                        });
                     }
-                    else
-                    {
-                      command = 'ex_hello(' + 1 + ')';
-                      self.hasSaidHello = true;
+                    else {
+                        deps.logger.debug(`ELPHEL-CONFIG: Invalid color value ${color} for camera ${cameraIp} - ignoring`);
                     }
-
-                    // Send command to camera
-                    request(`http://${cameraIp}/camvc.php?set=0/comp_run:stop/ae:${self.ae}/iq:${self.quality}/e:${self.exposure}/bh:${self.resolution}/bv:${self.resolution}/dh:${self.resolution}/dv:${self.resolution}/comp_run:run`, function (err, response, body) {
-                        if (response && response.statusCode == 200) {
-                            deps.logger.debug(`ELPHEL-CONFIG: Default settings set on camera ${cameraIp}`);
-                        }
-                        if (err) {
-                            deps.logger.debug('ELPHEL-CONFIG: Setting defaults failed with error:', err);
-                        }
-                    });
                 }),
 
-                exposure: new Listener( self.globalBus, 'plugin.elphel-config.exposure', false, function( cameraIp )
+                temp: new Listener( self.cockpitBus, 'plugin.elphel-config.temp', false, function( cameraIp )
                 {
-                    var command;
-
-                    // Create a command in the format "command( parameters )"
-                    if( self.hasSaidHello )
-                    {
-                      command = 'ex_hello(' + 0 + ')';
-                      self.hasSaidHello = false;
-                    }
-                    else
-                    {
-                      command = 'ex_hello(' + 1 + ')';
-                      self.hasSaidHello = true;
-                    }
-
+                    let onBoardTemp = 'i2c.php?width=8&bus=1&adr=0x4800';
                     // Send command to camera
-                    request(`http://${cameraIp}/camvc.php?set=0/comp_run:stop/ae:${self.ae}/iq:${self.quality}/e:${self.exposure}/bh:${self.resolution}/bv:${self.resolution}/dh:${self.resolution}/dv:${self.resolution}/comp_run:run`, function (err, response, body) {
+                    if (cameraIp === 'pilot')
+                        cameraIp = process.env['EXTERNAL_CAM_IP'];
+                    request(`http://${cameraIp}/${onBoardTemp}`, function (err, response, body) {
                         if (response && response.statusCode == 200) {
-                            deps.logger.debug(`ELPHEL-CONFIG: Default settings set on camera ${cameraIp}`);
+                            parseString(body, function (err, result) {
+                                if (result) {
+                                    deps.logger.debug(`ELPHEL-CONFIG: Onboard temperature ${result.i2c.data} on camera ${cameraIp}`);
+                                    // Emit temperature and camera ID to telemetry plugin
+                                    self.globalBus.emit('mcu.status', { `camTemp.${cameraIp}`:`${result.i2c.data}C` });
+                                }
+                                else if (err) {
+                                    deps.logger.debug(`ELPHEL-CONFIG: Onboard temperature request parsing error: ${err}`);
+                                }
+                            });
                         }
                         if (err) {
-                            deps.logger.debug('ELPHEL-CONFIG: Setting defaults failed with error:', err);
-                        }
-                    });
-                }),
-
-                snapFull: new Listener( self.globalBus, 'plugin.elphel-config.snapFull', false, function( cameraIp )
-                {
-                    var command;
-
-                    // Create a command in the format "command( parameters )"
-                    if( self.hasSaidHello )
-                    {
-                      command = 'ex_hello(' + 0 + ')';
-                      self.hasSaidHello = false;
-                    }
-                    else
-                    {
-                      command = 'ex_hello(' + 1 + ')';
-                      self.hasSaidHello = true;
-                    }
-
-                    // Send command to camera
-                    request(`http://${cameraIp}/camvc.php?set=0/comp_run:stop/ae:${self.ae}/iq:${self.quality}/e:${self.exposure}/bh:${self.resolution}/bv:${self.resolution}/dh:${self.resolution}/dv:${self.resolution}/comp_run:run`, function (err, response, body) {
-                        if (response && response.statusCode == 200) {
-                            deps.logger.debug(`ELPHEL-CONFIG: Default settings set on camera ${cameraIp}`);
-                        }
-                        if (err) {
-                            deps.logger.debug('ELPHEL-CONFIG: Setting defaults failed with error:', err);
+                            deps.logger.debug(`ELPHEL-CONFIG: Getting onBoard temperature on camera ${cameraIp} with error: ${err}`);
                         }
                     });
                 }),
@@ -209,7 +237,7 @@
                 resubscribe: true,
                 will: {
                     topic: 'status/openrov',
-                    payload: 'MJPEG-VIDEO-SERVER: OpenROV MQTT client disconnected!',
+                    payload: 'ELPHEL-CONFIG: OpenROV MQTT client disconnected!',
                     qos: 0,
                     retain: false
                 }
@@ -217,76 +245,60 @@
 
             this.client.on('connect', () => {
                 this.mqttConnected = true;
-                deps.logger.debug('MJPEG-VIDEO-SERVER: MQTT broker connection established!');
+                deps.logger.debug('ELPHEL-CONFIG: MQTT broker connection established!');
                 this.client.subscribe('toCamera/#'); // receive all camera control requests
             });
 
             this.client.on('reconnect', () => {
                 this.mqttConnected = true;
-                deps.logger.debug('MJPEG-VIDEO-SERVER: MQTT broker re-connected!');
+                deps.logger.debug('ELPHEL-CONFIG: MQTT broker re-connected!');
             });
 
             this.client.on('offline', () => {
                 this.mqttConnected = false;
-                deps.logger.debug('MJPEG-VIDEO-SERVER: MQTT broker connection offline!');
+                deps.logger.debug('ELPHEL-CONFIG: MQTT broker connection offline!');
             });
 
             this.client.on('close', () => {
                 // connection state is also set to false in class close() method
                 this.mqttConnected = false;
-                deps.logger.debug('MJPEG-VIDEO-SERVER: MQTT broker connection closed!');
+                deps.logger.debug('ELPHEL-CONFIG: MQTT broker connection closed!');
             });
 
             this.client.on('error', (err) => {
-                deps.logger.debug('MJPEG-VIDEO-SERVER: MQTT error: ', err);
+                deps.logger.debug('ELPHEL-CONFIG: MQTT error: ', err);
             });
 
             this.client.on('message', (topic, message) => {
-                // handle Elphel camera control messages
+                // handle Elphel camera control messages from the view-only browser clients
+                // and re-emit them as events
+                // openrov-cockpit pilot user emits events directly to handlers above
                 if (topic.match('toCamera/820[0-9]/.*') !== null) {
                     let command = topic.split('/');
                     let port = command[1];
                     let func = command[2];
-                    let cameraIp = this.cameraMap[port];
-                    let onBoardTemp = '/i2c.php?width=8&bus=1&adr=0x4800';
-                    // WOI_LEFT=100&WOI_TOP=300&WOI_WIDTH=800&WOI_HEIGHT=600&DCM_HOR=1&DCM_VER=1&BIN_HOR=1&BIN_VER=1
+                    let cameraIp;
+                    if (this.cameraMap.hasOwnProperty('port'))
+                        cameraIp = this.cameraMap[port].ipAddress;
                     let uri = `http://${cameraIp}/`;
                     switch(func) {
                         case 'exposure':
-                            if (message >= 10 && message <= 250)
-                                uri += `setparameters_demo.php?EXPOS=${message}`;
-                            else
-                                uri = 'ignore';
+                            self.cockpitBus.emit('plugin.elphel-config.exposure', cameraIp, message);
                             break;
                         case 'resolution':
-                            let valid = [1, 2, 4];
-                            if (valid.indexOf(message) > 0)
-                                uri += `setparameters_demo.php?DCM_HOR=${message}&DCM_VERT=${message}&BIN_HOR=${message}&BIN_VERT=${message}`;
-                            else
-                                uri = 'ignore';
+                            self.cockpitBus.emit('plugin.elphel-config.resolution', cameraIp, message);
                             break;
                         case 'quality':
-                            if (message >= 60 && message <= 100)
-                                uri += `setparameters_demo.php?QUALITY=${message}`;
-                            else
-                                uri = 'ignore';
+                            self.cockpitBus.emit('plugin.elphel-config.quality', cameraIp, message);
                             break;
                         case 'color':
-                            if (message === 1 || message === 5)
-                                uri += `setparameters_demo.php?COLOR=${message}`;
-                            else
-                                uri = 'ignore';
+                            // raw/normal events not available in viewer client controls yet
+                            self.cockpitBus.emit('plugin.elphel-config.color', cameraIp, message);
                             break;
                         case 'snapFull':
-                            // request() will follow redirects by default
-                            uri += `snapfull.php`;
-                            request(uri, {encoding: 'binary'}, function(error, response, body) {
-                                fs.writeFile(`/opt/openrov/images/`, body, 'binary', function (err) {});
-                            });
-                            uri = 'ignore';
+                            self.cockpitBus.emit('plugin.elphel-config.snapFull', cameraIp, message);
                             break;
                         default:
-                            uri = 'ignore';
                             break;
                     }
                     switch(uri) {
@@ -294,17 +306,26 @@
                             break;
                         default:
                             request(uri, function (err, response, body) {
-                                deps.logger.debug('MJPEG-VIDEO-SERVER: request error:', err);
-                                deps.logger.debug('MJPEG-VIDEO-SERVER: request statusCode:', response && response.statusCode);
-                                deps.logger.debug('MJPEG-VIDEO-SERVER: body:', body);
+                                deps.logger.debug('ELPHEL-CONFIG: request error:', err);
+                                deps.logger.debug('ELPHEL-CONFIG: request statusCode:', response && response.statusCode);
+                                deps.logger.debug('ELPHEL-CONFIG: body:', body);
                             });
                             break;
                     }
                 }
                 else if (topic.match('toCamera/cameraRegistration') !== null)
                 {
-                    let val = message.split(':');
-                    this.cameraMap[val[0]] = val[1];
+                    // add both port and ipAddress as keys to aid lookups for pilot cam
+                    let val = message.toString().split(':');
+                    this.cameraMap[val[0]] = {};
+                    this.cameraMap[val[0]].ipAddress = val[1];
+                    this.cameraMap[val[0]].id = val[2]; // either 'pilot' or last IP address octet
+                    this.cameraMap[val[0]].ts = val[3]; // timestamp used for image record directory
+
+                    this.cameraMap[val[1]] = {};
+                    this.cameraMap[val[1]].port = val[0];
+                    this.cameraMap[val[1]].id = val[2]; // either 'pilot' or last IP address octet
+                    this.cameraMap[val[1]].ts = val[3]; // timestamp used for image record directory
                 }
             });
         }
@@ -374,7 +395,13 @@
                   'autoExposure': {
                     'type': 'boolen',
                     'title': 'Autoexposure',
-                    'description': 'Default Elphel AutoExposure boolean',
+                    'description': 'Enable/disable Elphel auto-exposure',
+                    'default': false
+                  },
+                  'whiteBalance': {
+                    'type': 'boolen',
+                    'title': 'White balance',
+                    'description': 'Enable/disable Elphel automatic white balance',
                     'default': false
                   }
                 },
@@ -382,7 +409,8 @@
                   'exposureMillis',
                   'jpgQuality',
                   'resolution',
-                  'autoExposure'
+                  'autoExposure',
+                  'whiteBalance'
                 ]
             }];
         }
