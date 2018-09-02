@@ -154,7 +154,6 @@
     });
     this.cockpit.on('plugin-blackbox-recording-start', function () {
       self.startRecording();
-      // SCINI: signal mjpg_streamer to start recording
       let camSettings = {
           framerate: 30,
           resolution: "1280x720",
@@ -171,7 +170,6 @@
     });
     this.cockpit.on('plugin-blackbox-recording-stop', function () {
       self.stopRecording();
-      // SCINI: signal mjpg_streamer to start recording
       let camSettings = {
         framerate: 30,
         resolution: "1280x720",
@@ -441,6 +439,7 @@
     }).catch(function (err) {
       throw new Error(err);
     });
+    self.cockpit.emit('plugin.elphel-config.record', true);
   };
   Blackbox.prototype.stopRecording = function stopRecording() {
     if (this.recording) {

@@ -169,11 +169,7 @@
                                action: "plugin.elphel-config.quality100"},
                     "+":       { type: "button",
                                action: "plugin.elphel-config.exposureAdd"},
-                    "=":       { type: "button",
-                               action: "plugin.elphel-config.exposureAdd"},
                     "_":       { type: "button",
-                               action: "plugin.elphel-config.exposureSubtract"},
-                    "-":       { type: "button",
                                action: "plugin.elphel-config.exposureSubtract"},
                     "space":   { type: "button",
                                action: "plugin.elphel-config.snapFull"}
