@@ -32,11 +32,32 @@
 */
 
 const mqtt          = require('mqtt');
+const fs            = require( "fs" ) ;
 const EventEmitter  = require('events').EventEmitter;
 const logger        = require('AppFramework.js').logger;
 const pro4          = require('./pro4');
 const q             = require('queue');
-const request       = require('request');
+
+// Setup buffered logging for telemetry
+function addZero(i) {
+  if (i < 10) {
+    i = "0" + i;
+  }
+  return i;
+}
+const pino          = require('pino');
+const months        = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const d             = new Date();
+const day           = addZero(d.getDate());
+const h             = addZero(d.getHours());
+const m             = addZero(d.getMinutes());
+const ts            = day + months[d.getMonth()] + h + m;
+const logDir        = '/opt/openrov/data/' + ts;
+if (!fs.existsSync(logDir))
+  fs.mkdirSync(logDir, '0775');
+// TODO: upgrade to pino v5 - we're using v3 in cockpit shrinkwrap for now
+// v5 ref: https://github.com/pinojs/pino/blob/master/docs/extreme.md
+const dataLogger = pino({extreme: true}, fs.createWriteStream(`${logDir}/${ts}.log`));
 
 class Bridge extends EventEmitter
 {
@@ -263,8 +284,6 @@ class Bridge extends EventEmitter
 
   }
 
-
-
   connect()
   {
     let self = this;
@@ -278,7 +297,9 @@ class Bridge extends EventEmitter
     self.motorInterval = setInterval( function() { return self.updateMotors(); },     self.motorControl.updateInterval );
     self.rotateMotorInterval = setInterval( function() { return self.rotateMotor(); },     self.motorControl.rotateInterval );
     self.gripperInterval = setInterval( function() { return self.requestGrippers(); },     self.gripperControl.updateInterval );
-
+    // asynchronously flush every 10 seconds to keep the buffer empty
+    // in periods of low activity
+    self.dataLoggerInterval = setInterval(function () { dataLogger.flush(); }, 10000).unref();
 
     // Connect to MQTT broker and setup all event handlers
     // Note that platform code is loaded before MQTT broker plugin, so the
@@ -328,6 +349,7 @@ class Bridge extends EventEmitter
         let parsedObj = self.parser.parse(message);
         if (parsedObj.status == pro4.constants.STATUS_SUCCESS)
         {
+          let status = '';
           logger.debug('BRIDGE: Successfully parsed ROV PRO4 packet, advancing job queue; message = ', message.toString('hex'));
           self.jobs[clientId].cb(); // advance queue
 
@@ -342,14 +364,15 @@ class Bridge extends EventEmitter
             {
               for (let i = 0; i < parsedObj.device[prop].length; i++)
               {
-                self.emitStatus(`${parsedObj.type}.${prop}.${parsedObj.id}.${i}:${parsedObj.device[prop]}`);
+                status += `${parsedObj.type}.${prop}.${parsedObj.id}.${i}:${parsedObj.device[prop]};`;
               }
             }
             else
             {
-              self.emitStatus(`${parsedObj.type}.${prop}.${parsedObj.id}:${parsedObj.device[prop]}`);
+              status += `${parsedObj.type}.${prop}.${parsedObj.id}:${parsedObj.device[prop]};`;
             }
           }
+          self.emitStatus(status);
         }
         else if (parsedObj.status == pro4.constants.STATUS_MOREDATA)
         {
@@ -436,6 +459,7 @@ class Bridge extends EventEmitter
     });
   }
 
+
   close()
   {
     let self = this;
@@ -448,6 +472,7 @@ class Bridge extends EventEmitter
     clearInterval( self.lightsInterval );
     clearInterval( self.motorInterval );
     clearInterval( self.rotateInterval );
+    clearInterval( self.dataLoggerInterval );
     // clearInterval( self.gripperInterval);
 
     self.client.end(false, () => {
@@ -621,6 +646,7 @@ class Bridge extends EventEmitter
       {
         // Ack command
         self.emitStatus('camServ_inv:' + parameters[0] );
+
         break;
       }
 
@@ -1159,6 +1185,8 @@ class Bridge extends EventEmitter
     }
     // emit to telemetry plugin
     this.globalBus.emit('mcu.status', txtStatus);
+    // Archive telemetry update
+    dataLogger.info(txtStatus);
 
     if (this.emitRawSerial)
     {
