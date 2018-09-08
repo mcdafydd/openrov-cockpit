@@ -48,8 +48,7 @@
                 // Listener for MQTT clientConnected
                 clientConnected: new Listener( self.globalBus, 'plugin.mqttBroker.clientConnected', true, function( client )
                 {
-                    deps.logger.debug(`ELPHEL-CONFIG: New MQTT client connected ${client.id}`);
-                    // if camera connect to MQTT broker, send normal defaults one time
+                    // if camera connects to MQTT broker, send normal defaults one time
                     if (client.id.match('elphel.*') !== null) {
                         let cameraIp = client.connection.stream.remoteAddress;
                         deps.logger.debug(`ELPHEL-CONFIG: New camera joined at IP address ${cameraIp}`);
@@ -396,6 +395,7 @@
                 'title': 'ElphelConfig Plugin',
                 'type': 'object',
                 'id': 'elphel-config',
+                'category': 'general',
                 'properties': {
                   'exposureMillis': {
                     'type': 'integer',
@@ -422,15 +422,21 @@
                     'maximum': 4
                   },
                   'autoExposure': {
-                    'type': 'boolen',
+                    'type': 'boolean',
                     'title': 'Autoexposure',
                     'description': 'Enable/disable Elphel auto-exposure',
                     'default': false
                   },
                   'whiteBalance': {
-                    'type': 'boolen',
+                    'type': 'boolean',
                     'title': 'White balance',
                     'description': 'Enable/disable Elphel automatic white balance',
+                    'default': false
+                  },
+                  'colorMode': {
+                    'type': 'boolean',
+                    'title': 'Enable raw (JP4) mode',
+                    'description': 'true = enable JP4 raw image streaming (requires special decoder; false = use normal color mode',
                     'default': false
                   }
                 },
@@ -439,7 +445,8 @@
                   'jpgQuality',
                   'resolution',
                   'autoExposure',
-                  'whiteBalance'
+                  'whiteBalance',
+                  'colorMode'
                 ]
             }];
         }
