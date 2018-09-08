@@ -637,8 +637,8 @@
     },
     "mjpeg-video-server": {
       "version": "2.0.0",
-      "from": "git+https://github.com/mcdafydd/mjpeg-video-server.git#b22c296fe72328232769da1806e57d9df04c3a9c",
-      "resolved": "git+https://github.com/mcdafydd/mjpeg-video-server.git#b22c296fe72328232769da1806e57d9df04c3a9c"
+      "from": "git+https://github.com/mcdafydd/mjpeg-video-server.git#01ed4a8d5bb32125c8d4d2c54b0e9be60a3cdbef",
+      "resolved": "git+https://github.com/mcdafydd/mjpeg-video-server.git#01ed4a8d5bb32125c8d4d2c54b0e9be60a3cdbef"
     },
     "mqtt": {
       "version": "2.18.8",
@@ -1035,9 +1035,9 @@
       "resolved": "https://registry.npmjs.org/spdx-expression-parse/-/spdx-expression-parse-3.0.0.tgz"
     },
     "spdx-license-ids": {
-      "version": "3.0.0",
+      "version": "3.0.1",
       "from": "spdx-license-ids@>=3.0.0 <4.0.0",
-      "resolved": "https://registry.npmjs.org/spdx-license-ids/-/spdx-license-ids-3.0.0.tgz"
+      "resolved": "https://registry.npmjs.org/spdx-license-ids/-/spdx-license-ids-3.0.1.tgz"
     },
     "split2": {
       "version": "2.2.0",
