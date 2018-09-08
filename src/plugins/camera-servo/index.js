@@ -118,10 +118,6 @@
 
                     // Initiate a sync of the settings with the MCU
                     self.SyncSettings.start();
-
-                    // Enable SCINI servo listeners
-                    self.listeners.stepNegative.enable();
-                    self.listeners.stepPositive.enable();
                 }),
 
                 mcuStatus: new Listener( this.globalBus, 'mcu.status', false, function( data )
@@ -218,6 +214,9 @@
         start()
         {
             this.listeners.settings.enable();
+            // SCINI: Enable servo listeners
+            this.listeners.stepNegative.enable();
+            this.listeners.stepPositive.enable();
         }
 
         stop()
@@ -225,6 +224,8 @@
             this.listeners.settings.disable();
             this.listeners.mcuStatus.disable();
             this.listeners.setTargetPos.disable();
+            this.listeners.stepNegative.disable();
+            this.listeners.stepPositive.disable();
         }
 
         getSettingSchema()

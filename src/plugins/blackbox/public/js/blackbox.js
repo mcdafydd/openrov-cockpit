@@ -159,7 +159,7 @@
           resolution: "1280x720",
           record: true
           };
-      self.cockpit.rov.emit('settings-change.videosettings', camSettings);
+      self.cockpit.rov.emit('settings-change.mjpegVideo', camSettings);
 
     });
     this.cockpit.on('plugin-blackbox-sync-session', function (sessionID) {
@@ -175,7 +175,7 @@
         resolution: "1280x720",
         record: false
         };
-    self.cockpit.rov.emit('settings-change.mjpegVideo', camSettings);
+      self.cockpit.rov.emit('settings-change.mjpegVideo', camSettings);
     });
     this.cockpit.on('plugin-blackbox-get-sessions', function (callback) {
       self.recordedSessions(function(recordedSessions){
