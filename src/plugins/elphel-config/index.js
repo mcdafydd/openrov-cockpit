@@ -225,12 +225,12 @@
                             parseString(body, function (err, result) {
                                 if (result) {
                                     deps.logger.debug(`ELPHEL-CONFIG: Onboard temperature ${result.i2c.data} on camera ${cameraIp}`);
-                                    // Emit temperature and camera ID to telemetry plugin
-                                    statusobj[prop] = result.i2c.data + 'C';
+                                    // Emit temperature (in degrees C) and camera ID to telemetry plugin
+                                    statusobj[prop] = parseInt(result.i2c.data);
                                     self.globalBus.emit('mcu.status', statusobj);
                                 }
                                 else if (err) {
-                                    statusobj[prop] = 'nodata';
+                                    statusobj[prop] = -1;
                                     self.globalBus.emit('mcu.status', statusobj);
                                     deps.logger.debug(`ELPHEL-CONFIG: Onboard temperature request parsing error: ${err}`);
                                 }
@@ -333,6 +333,9 @@
                             case 'snapFull':
                                 self.cockpitBus.emit('plugin.elphel-config.snapFull', cameraIp, value);
                                 break;
+                            case 'temp':
+                                self.cockpitBus.emit('plugin.elphel-config.temp', cameraIp);
+                                break;
                             default:
                                 break;
                         }
@@ -358,6 +361,16 @@
             });
         }
 
+        requestCamTemp()
+        {
+          let self = this;
+
+          for (let prop in self.cameraMap) {
+            if (prop.match('820[0-9]') !== null)
+              self.cockpitBus.emit('plugin.elphel-config.temp', self.cameraMap[prop].ipAddress);
+          }
+        }
+
         // This is automatically called when cockpit loads all of the plugins, and when a plugin is enabled
         start()
         {
@@ -367,9 +380,13 @@
           this.listeners.mcuStatus.enable();
           this.listeners.resolution.enable();
           this.listeners.quality.enable();
+          this.listeners.color.enable();
           this.listeners.exposure.enable();
           this.listeners.snapFull.enable();
           this.listeners.sayHello.enable();
+          this.listeners.temp.enable();
+
+          this.camTempInterval = setInterval(() => { return this.requestCamTemp(); }, 5000);
         }
 
         // This is called when the plugin is disabled
@@ -381,9 +398,13 @@
           this.listeners.mcuStatus.disable();
           this.listeners.resolution.disable();
           this.listeners.quality.disable();
+          this.listeners.color.disable();
           this.listeners.exposure.disable();
           this.listeners.snapFull.disable();
           this.listeners.sayHello.disable();
+          this.listeners.temp.disable();
+
+          clearInterval(this.camTempInterval);
         }
 
         // This is used to define user settings for the plugin. We populated some elphel-config properties below.
