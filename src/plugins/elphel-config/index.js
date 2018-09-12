@@ -27,9 +27,9 @@
             this.cameraMap = {};
 
             // camera defaults to send on mqtt clientConnect
-            this.quality = 90; // 90% JPEG compression
-            this.exposure = 50000; // in microseconds
-            this.resolution = 1; // 1/n resolution
+            this.quality = 85; // 85% JPEG compression
+            this.exposure = 100000; // in microseconds
+            this.resolution = 4; // 1/n resolution
 
             // Pre-define all of the event listeners here. We defer enabling them until later.
             // Look at src/libs/Listener.js to see how these work.
@@ -52,7 +52,7 @@
                     if (client.id.match('elphel.*') !== null) {
                         let cameraIp = client.connection.stream.remoteAddress;
                         deps.logger.debug(`ELPHEL-CONFIG: New camera joined at IP address ${cameraIp}`);
-                        request(`http://${cameraIp}/setparameters_demo.php?AUTOEXP_ON=0&WB_EN=0&QUALITY=${self.quality}&EXPOS=${self.exposure}&BCH_HOR=${self.resolution}&BIN_VERT=${self.resolution}&DCM_HOR=${self.resolution}&DCM_VERT=${self.resolution}`, function (err, response, body) {
+                        request(`http://${cameraIp}/setparameters_demo.php?AUTOEXP_ON=0&WB_EN=1&QUALITY=${self.quality}&EXPOS=${self.exposure}&BCH_HOR=${self.resolution}&BIN_VERT=${self.resolution}&DCM_HOR=${self.resolution}&DCM_VERT=${self.resolution}`, function (err, response, body) {
                             if (response && response.statusCode == 200) {
                                 deps.logger.debug(`ELPHEL-CONFIG: Default settings set on camera ${cameraIp}`);
                                 // add IP to cameraMap with default properties on success
@@ -401,15 +401,15 @@
                     'type': 'integer',
                     'title': 'Exposure (ms)',
                     'description': 'Default Elphel camera sensor exposure value in milliseconds',
-                    'default': 30,
+                    'default': 100,
                     'minimum': 5,
-                    'maximum': 300
+                    'maximum': 500
                   },
                   'jpgQuality': {
                       'type': 'integer',
                       'title': 'JPEG Quality',
                       'description': 'Default Elphel camera sensor JPEG compression quality value',
-                      'default': 90,
+                      'default': 85,
                       'minimum': 60,
                       'maximum': 100
                   },
@@ -417,7 +417,7 @@
                     'type': 'integer',
                     'title': 'Camera resolution (1/n)',
                     'description': 'Default Elphel camera resolution - valid values are 1, 2, and 4 for full, half, and quarter resolution',
-                    'default': 1,
+                    'default': 4,
                     'minimum': 1,
                     'maximum': 4
                   },
