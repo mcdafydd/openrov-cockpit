@@ -637,8 +637,8 @@
     },
     "mjpeg-video-server": {
       "version": "2.0.0",
-      "from": "git+https://github.com/mcdafydd/mjpeg-video-server.git#01ed4a8d5bb32125c8d4d2c54b0e9be60a3cdbef",
-      "resolved": "git+https://github.com/mcdafydd/mjpeg-video-server.git#01ed4a8d5bb32125c8d4d2c54b0e9be60a3cdbef"
+      "from": "git+https://github.com/mcdafydd/mjpeg-video-server.git#07e7a23b995f1d007c7916ba6780559231401dfe",
+      "resolved": "git+https://github.com/mcdafydd/mjpeg-video-server.git#07e7a23b995f1d007c7916ba6780559231401dfe"
     },
     "mqtt": {
       "version": "2.18.8",
