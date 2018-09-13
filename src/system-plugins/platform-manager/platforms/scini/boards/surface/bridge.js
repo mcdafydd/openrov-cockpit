@@ -58,6 +58,18 @@ if (!fs.existsSync(logDir))
 // TODO: upgrade to pino v5 - we're using v3 in cockpit shrinkwrap for now
 // v5 ref: https://github.com/pinojs/pino/blob/master/docs/extreme.md
 const dataLogger = pino({extreme: true}, fs.createWriteStream(`${logDir}/${ts}.log`));
+dataLogger.level = 'info';
+
+const mqttConfigFile;
+if(!fs.existsSync('/opt/openrov/config/mqttConfig.json')) {
+  logger.error('BRIDGE: /opt/openrov/config/mqttConfig.json - file not found');
+  logger.error('BRIDGE: Exiting...');
+  process.exit(1);
+}
+else {
+  mqttConfigFile = fs.readFileSync('/opt/openrov/config/mqttConfig.json');
+}
+
 
 class Bridge extends EventEmitter
 {
@@ -76,6 +88,8 @@ class Bridge extends EventEmitter
     this.depthHoldEnabled   = false;
     this.targetHoldEnabled  = false;
     this.laserEnabled       = false;
+
+    this.mqttConfig = JSON.parse(mqttConfigFile.toString());
 
     // *********** SCINI concurrency control and parser state objects ****
     this.jobs = {};
@@ -345,7 +359,8 @@ class Bridge extends EventEmitter
       // use client-specific topic and pass handling to appropriate parser
       let clientId = topic.split('/', 2)[1];
       // only send messages from elphel gateways to parser
-      if (clientId.match('elphel.*') !== null) {
+      if (clientId.match('elphel.*') !== null
+          && self.mqttConfig[clientIp].receiveMqtt === true) {
         let parsedObj = self.parser.parse(message);
         if (parsedObj.status == pro4.constants.STATUS_SUCCESS)
         {
@@ -402,9 +417,19 @@ class Bridge extends EventEmitter
 
     self.globalBus.on('plugin.mqttBroker.clientConnected', (client) => {
       let clientId = client.id;
+      let clientIp = client.connection.stream.remoteAddress;
+      // add clientIp to mqttConfig if it doesn't exist
+      if (!self.mqttConfig.hasOwnProperty(clientIp)) {
+        self.mqttConfig[clientIp] = {};
+      }
+      if (!self.mqttConfig[clientIp].hasOwnProperty('receiveMqtt')) {
+        self.mqttConfig[clientIp].receiveMqtt = false;
+      }
+      self.mqttConfig[clientIp].id = clientId;
       logger.debug('BRIDGE: Received MQTT clientConnected() from ' + clientId);
       // create new message queue for each ROV MQTT gateway
-      if (clientId.match('elphel.*') !== null) {
+      if (clientId.match('elphel.*') !== null
+          && self.mqttConfig[clientIp].receiveMqtt === true) {
         // create new state machine, parse buffer, and job queue
         // concurrency = 1 (one message in flight at a time)
         // max wait time for response = 20ms
