@@ -62,7 +62,7 @@ dataLogger.level = 'info';
 
 let mqttConfigFile;
 if(!fs.existsSync('/opt/openrov/config/mqttConfig.json')
-    && fs.statSync('/opt/openrov/config/mqttConfig.json').size > 0) {
+    || fs.statSync('/opt/openrov/config/mqttConfig.json').size === 0) {
   logger.error('BRIDGE: /opt/openrov/config/mqttConfig.json - file not found or zero size');
   logger.error('BRIDGE: Exiting...');
   process.exit(1);
@@ -94,7 +94,9 @@ class Bridge extends EventEmitter
       this.mqttConfig = JSON.parse(mqttConfigFile.toString());
     } catch (e) {
       logger.error(`BRIDGE: Exiting due to error parsing /opt/openrov/config/mqttConfig.json: ${e}`);
+      process.exit(1);
     }
+    this.mqttConfigId = {};  // used for reverse lookup on MQTT receive message
 
     // *********** SCINI concurrency control and parser state objects ****
     this.jobs = {};
@@ -363,6 +365,9 @@ class Bridge extends EventEmitter
 
       // use client-specific topic and pass handling to appropriate parser
       let clientId = topic.split('/', 2)[1];
+      let clientIp;
+      if (self.mqttConfigId.hasOwnProperty(clientId))
+        clientIp = self.mqttConfigId[clientId];
       // only send messages from elphel gateways to parser
       if (clientId.match('elphel.*') !== null
           && self.mqttConfig[clientIp].receiveMqtt === true) {
@@ -431,6 +436,7 @@ class Bridge extends EventEmitter
         self.mqttConfig[clientIp].receiveMqtt = false;
       }
       self.mqttConfig[clientIp].id = clientId;
+      self.mqttConfigId[clientId] = clientIp;
       logger.debug('BRIDGE: Received MQTT clientConnected() from ' + clientId);
       // create new message queue for each ROV MQTT gateway
       if (clientId.match('elphel.*') !== null
@@ -474,10 +480,12 @@ class Bridge extends EventEmitter
     });
     self.globalBus.on('plugin.mqttBroker.clientDisconnected', (client) => {
       let clientId = client.id;
+      let clientIp = client.connection.stream.remoteAddress;
       logger.debug('BRIDGE: Received MQTT clientDisconnected() from ' + clientId);
       // stop and empty queue
       if (typeof(clientId) != 'undefined') {
-        if (clientId.match('elphel.*') !== null) {
+        if (clientId.match('elphel.*') !== null
+            && self.mqttConfig[clientIp].receiveMqtt === true) {
           self.results[clientId] = [];
           self.jobs[clientId].end();
         }
@@ -513,10 +521,12 @@ class Bridge extends EventEmitter
     // stop and empty job queues
     logger.debug('BRIDGE: Empty and stop MQTT client job queues');
     // stop and empty queue
-    if (clientId.match('elphel.*') !== null) {
+    /* FIX
+    if (clientId.match('elphel.*') !== null
+        && self.mqttConfig[clientIp].receiveMqtt === true) {
       self.results[clientId] = [];
       self.jobs[clientId].end();
-    }
+    }*/
   }
 
   write( command )
