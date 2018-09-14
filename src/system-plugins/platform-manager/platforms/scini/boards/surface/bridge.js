@@ -60,7 +60,7 @@ if (!fs.existsSync(logDir))
 const dataLogger = pino({extreme: true}, fs.createWriteStream(`${logDir}/${ts}.log`));
 dataLogger.level = 'info';
 
-const mqttConfigFile;
+let mqttConfigFile;
 if(!fs.existsSync('/opt/openrov/config/mqttConfig.json')) {
   logger.error('BRIDGE: /opt/openrov/config/mqttConfig.json - file not found');
   logger.error('BRIDGE: Exiting...');
