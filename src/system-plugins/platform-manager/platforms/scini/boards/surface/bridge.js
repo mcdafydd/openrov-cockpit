@@ -61,8 +61,9 @@ const dataLogger = pino({extreme: true}, fs.createWriteStream(`${logDir}/${ts}.l
 dataLogger.level = 'info';
 
 let mqttConfigFile;
-if(!fs.existsSync('/opt/openrov/config/mqttConfig.json')) {
-  logger.error('BRIDGE: /opt/openrov/config/mqttConfig.json - file not found');
+if(!fs.existsSync('/opt/openrov/config/mqttConfig.json')
+    && fs.statSync('/opt/openrov/config/mqttConfig.json').size > 0) {
+  logger.error('BRIDGE: /opt/openrov/config/mqttConfig.json - file not found or zero size');
   logger.error('BRIDGE: Exiting...');
   process.exit(1);
 }
@@ -89,7 +90,11 @@ class Bridge extends EventEmitter
     this.targetHoldEnabled  = false;
     this.laserEnabled       = false;
 
-    this.mqttConfig = JSON.parse(mqttConfigFile.toString());
+    try {
+      this.mqttConfig = JSON.parse(mqttConfigFile.toString());
+    } catch (e) {
+      logger.error(`BRIDGE: Exiting due to error parsing /opt/openrov/config/mqttConfig.json: ${e}`);
+    }
 
     // *********** SCINI concurrency control and parser state objects ****
     this.jobs = {};
