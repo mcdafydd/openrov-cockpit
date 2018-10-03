@@ -57,7 +57,8 @@ if (!fs.existsSync(logDir))
   fs.mkdirSync(logDir, '0775');
 // TODO: upgrade to pino v5 - we're using v3 in cockpit shrinkwrap for now
 // v5 ref: https://github.com/pinojs/pino/blob/master/docs/extreme.md
-const dataLogger = pino({extreme: true}, fs.createWriteStream(`${logDir}/${ts}.log`));
+const fd = fs.openSync(`${logDir}/${ts}.log`, 'w');
+const dataLogger = pino({extreme: true}, fs.createWriteStream(null, {fd: fd}));
 dataLogger.level = 'info';
 
 let mqttConfigFile;
@@ -143,7 +144,7 @@ class Bridge extends EventEmitter
       },
       pro4:             {
         pro4Sync:       pro4.constants.SYNC_REQUEST8LE,
-        pro4Addresses:  [42, 51, 52], // ps crumbs = 41, 43, camera crumbs = 53, 54, 55; 64 spare address
+        pro4Addresses:  [41, 42, 43, 51, 52, 53, 54, 55], // ps crumbs = 41-43, camera crumbs = 51-55; 64 spare address
         flags:          0x00,       // or 0x80
         csrAddress:     0xf0,       // custom command address
         lenNoop:        6,          // no write, just read all values
@@ -167,28 +168,35 @@ class Bridge extends EventEmitter
     this.sensors.pro4.bamPayload.writeUInt8(this.sensors.pro4.payloadLenBam, 4);       // payload len
     this.sensors.pro4.bamPayload.writeUInt8(this.sensors.pro4.payloadCmdBam, 5);       // payload cmd
 
-    this.clumpLights = {
+    this.rovLights = {
       time:             0,
       timeDelta_ms:     0,
-      updateInterval:   700,        // loop interval in ms
-      power:            0,          // 0 to 1
+      updateInterval:   700,    // loop interval in ms
+      devices:           {
+        61:             {
+          location:     'rov',
+          power:        0.0
+        },
+        62:             {
+          location:     'rov',
+          power:        0.0
+        },
+        63:             {
+          location:     'rov',
+          power:        0.0
+        },
+        65:             {
+          location:     'clump',
+          power:        0.0
+        },
+        66:             {
+          location:     'clump',
+          power:        0.0
+        }
+      },
       pro4:             {
-        pro4Sync:       pro4.constants.SYNC_REQUEST32LE,
-        pro4Addresses:  [65, 66], // all updated at same time
-        flags:          2,          // defined by VideoRay
-        csrAddress:     0,          // custom command address
-        len:            4 * 3       // 3 led banks
-      }
-    }
-
-    this.vehicleLights = {
-      time:             0,
-      timeDelta_ms:     0,
-      updateInterval:   700,        // loop interval in ms
-      power:            0,          // 0 to 1
-      pro4:             {
-        pro4Sync:       pro4.constants.SYNC_REQUEST32LE,
-        pro4Addresses:  [61, 62, 63], // all updated at same time - note these are NOT hex addresses
+        sync:       pro4.constants.SYNC_REQUEST32LE,
+        addresses:  [61, 62, 63, 65, 66], // all updated at same time
         flags:          2,          // defined by VideoRay
         csrAddress:     0,          // custom command address
         len:            4 * 3       // 3 led banks
@@ -314,7 +322,7 @@ class Bridge extends EventEmitter
     // Add SCINI device control interval functions
     self.sensorInterval = setInterval( function() { return self.requestSensors(); },          self.sensors.updateInterval );
     self.navInterval = setInterval( function() { return self.updateNav(); },          self.sensors.navInterval );
-    self.lightsInterval = setInterval( function() { return self.updateLights(); },       self.vehicleLights.updateInterval );
+    self.lightsInterval = setInterval( function() { return self.updateLights(); },       self.rovLights.updateInterval );
     self.motorInterval = setInterval( function() { return self.updateMotors(); },     self.motorControl.updateInterval );
     self.rotateMotorInterval = setInterval( function() { return self.rotateMotor(); },     self.motorControl.rotateInterval );
     self.gripperInterval = setInterval( function() { return self.requestGrippers(); },     self.gripperControl.updateInterval );
@@ -328,6 +336,7 @@ class Bridge extends EventEmitter
     self.client = mqtt.connect(self.mqttUri, {
       protocolVersion: 4,
       resubscribe: true,
+      clientId: 'bridge',
       will: {
         topic: 'status/openrov',
         payload: 'OpenROV MQTT client disconnected!',
@@ -345,6 +354,8 @@ class Bridge extends EventEmitter
       self.client.subscribe('sensors/+'); // receive all sensor telemetry
       self.client.subscribe('clump/+'); // receive all clump weight topics
       self.client.subscribe('vehicle/+'); // receive all vechicle topics
+      self.client.subscribe('servo/#'); // receive servo control commands
+      self.client.subscribe('light/#'); // receive light control commands
       self.client.subscribe('fromScini/#'); // receive all messages from the ROV
     });
 
@@ -363,55 +374,17 @@ class Bridge extends EventEmitter
       logger.debug('BRIDGE: Received MQTT on topic ' + topic);
       logger.warn('BRIDGE: Raw MQTT message = ' + message.toString('hex'));
 
-      // use client-specific topic and pass handling to appropriate parser
-      let clientId = topic.split('/', 2)[1];
-      let clientIp;
-      if (self.mqttConfigId.hasOwnProperty(clientId))
-        clientIp = self.mqttConfigId[clientId];
-      // only send messages from elphel gateways to parser
-      if (clientId.match('elphel.*') !== null
-          && self.mqttConfig[clientIp].receiveMqtt === true) {
-        let parsedObj = self.parser.parse(message);
-        if (parsedObj.status == pro4.constants.STATUS_SUCCESS)
-        {
-          let status = '';
-          logger.debug('BRIDGE: Successfully parsed ROV PRO4 packet, advancing job queue; message = ', message.toString('hex'));
-          self.jobs[clientId].cb(); // advance queue
-
-          if (parsedObj.type == 'pilot')
-          {
-            self.updateSensors(parsedObj); // handles IMU calculations and sending sensor data to cockpit
-          }
-          // send parsed device data to browser telemetry plugin
-          for (let prop in parsedObj.device)
-          {
-            if (typeof parsedObj.device[prop] == 'object')
-            {
-              for (let i = 0; i < parsedObj.device[prop].length; i++)
-              {
-                status += `${parsedObj.type}.${prop}.${parsedObj.id}.${i}:${parsedObj.device[prop]};`;
-              }
-            }
-            else
-            {
-              status += `${parsedObj.type}.${prop}.${parsedObj.id}:${parsedObj.device[prop]};`;
-            }
-          }
-          self.emitStatus(status);
-        }
-        else if (parsedObj.status == pro4.constants.STATUS_MOREDATA)
-        {
-          logger.debug('BRIDGE: Waiting for more data; message = ', message.toString('hex'));
-        }
-        else if (parsedObj.status == pro4.constants.STATUS_ERROR)
-        {
-          logger.warn('BRIDGE: Error in PRO4 message parser; message = ', message.toString('hex'));
-          self.jobs[clientId].cb(); // advance queue
-        }
-        else // invalid status
-        {
-          logger.warn('BRIDGE: Invalid PRO4 parser status = ', parsedObj.status, ' ; message = ', message.toString('hex'));
-        }
+      if (topic.match('fromScini/.*') !== null) {
+        self.handleRovMqtt(topic, message);
+      }
+      else if (topic.match('light/.*') !== null) {
+        self.handleLightMqtt(topic, message);
+      }
+      else if (topic.match('servo/.*') !== null) {
+        self.handleServoMqtt(topic, message);
+      }
+      else {
+        logger.info('BRIDGE: No handler for message');
       }
     });
 
@@ -621,6 +594,7 @@ class Bridge extends EventEmitter
         break;
       }
 
+      // handles OpenROV cockpit legacy lights object
       case 'lights_tpow':
       {
         // Scale and limit power between 0 and 1 (maximums are 0, 1)
@@ -633,7 +607,7 @@ class Bridge extends EventEmitter
         self.emitStatus('lights.currentPower:' + parameters[0] );
 
         // Update state object to be sent on next packet interval
-        self.vehicleLights.power = power;
+        self.rovLights.devices['61'].power = power;
 
         // Ack command
         setTimeout( function()
@@ -655,7 +629,7 @@ class Bridge extends EventEmitter
         self.emitStatus('elights_tpow:' + power );
 
         // Update state object to be sent on next packet interval
-        self.clumpLights.power = power;
+        self.rovLights.devices['65'].power = power;
 
         // Ack command
         setTimeout( function()
@@ -699,9 +673,49 @@ class Bridge extends EventEmitter
 
       case 'camServ_cmd':
       {
-        self.updateServos(parameters[0]);
+        self.updateServos(52, parameters[0]);
         // Ack command
         self.emitStatus('camServ_cmd:' + parameters[0] );
+        break;
+      }
+
+      case 'camServ_scni_51':
+      {
+        self.updateServos(51, parameters[0]);
+        // Ack command
+        self.emitStatus('camServ_scni_51:' + parameters[0] );
+        break;
+      }
+
+      case 'camServ_scni_52':
+      {
+        self.updateServos(52, parameters[0]);
+        // Ack command
+        self.emitStatus('camServ_scni_52:' + parameters[0] );
+        break;
+      }
+
+      case 'camServ_scni_53':
+      {
+        self.updateServos(53, parameters[0]);
+        // Ack command
+        self.emitStatus('camServ_scni_53:' + parameters[0] );
+        break;
+      }
+
+      case 'camServ_scni_54':
+      {
+        self.updateServos(54, parameters[0]);
+        // Ack command
+        self.emitStatus('camServ_scni_54:' + parameters[0] );
+        break;
+      }
+
+      case 'camServ_scni_55':
+      {
+        self.updateServos(55, parameters[0]);
+        // Ack command
+        self.emitStatus('camServ_scni_55:' + parameters[0] );
         break;
       }
 
@@ -1280,56 +1294,32 @@ class Bridge extends EventEmitter
   updateLights()
   {
     let self = this;
+    let p = self.rovLights.pro4;
+    let payload = new Buffer.allocUnsafe(p.len);
 
-    // Update time
-    self.vehicleLights.time += self.vehicleLights.timeDelta_ms;
-    self.clumpLights.time += self.clumpLights.timeDelta_ms;
     // Sample light payload - light values [0.1, 0.2, 0.3]
     // Request:
     //f5:5f:3d:02:00:0c:2a:c9:ad:46:cd:cc:cc:3d:cd:cc:4c:3e:9a:99:99:3e:22:ad:d8:6e
     // Response:
     //f0:0f:3d:02:f0:0e:c3:17:c1:d4:83:00:5a:07:42:66:e6:83:be:00:00:06:42:00:1a:c4:ab:7e
 
-    // convert OpenROV light target power to 3 identical 32-bit LE floats and build payload
-    let payload = new Buffer.allocUnsafe(self.vehicleLights.pro4.len);
-    payload.writeFloatLE(self.vehicleLights.power, 0);
-    payload.writeFloatLE(self.vehicleLights.power, 4);
-    payload.writeFloatLE(self.vehicleLights.power, 8);
-
-    let clumpPayload = new Buffer.allocUnsafe(self.clumpLights.pro4.len);
-    clumpPayload.writeFloatLE(self.clumpLights.power, 0);
-    clumpPayload.writeFloatLE(self.clumpLights.power, 4);
-    clumpPayload.writeFloatLE(self.clumpLights.power, 8);
-
-    // shorter name for easier reading
-    let p = self.vehicleLights.pro4;
-    let p2 = self.clumpLights.pro4;
-
-    // Generate new pro4 packet for each address and send to all light modules
-    for (let i = 0; i < p.pro4Addresses.length; i++) {
-      (function() {
-        let j = i;  // loop closure
-        // Packet len = Header + 4-byte CRC + payload + 4-byte CRC = 27
-        let packetBuf = self.parser.encode(p.pro4Sync, p.pro4Addresses[j], p.flags, p.csrAddress, p.len, payload);
-        // maintain light state by updating at least once per second
-        self.addToPublishQueue(packetBuf);
-      })();
+    // Generate new pro4 packet for each nodeId and send to all three light modules
+    for (let nodeId in self.rovLights.devices) {
+      if (self.rovLights.devices[nodeId].power > 0) {
+        // convert OpenROV light target power to 3 identical 32-bit LE floats and build payload
+        payload.writeFloatLE(self.rovLights.devices[nodeId].power, 0);
+        payload.writeFloatLE(self.rovLights.devices[nodeId].power, 4);
+        payload.writeFloatLE(self.rovLights.devices[nodeId].power, 8);
+        (function() {
+          let id = nodeId;  // loop closure - do I still need this?
+          // Packet len = Header + 4-byte CRC + payload + 4-byte CRC = 27
+          let packetBuf = self.parser.encode(p.sync, id, p.flags, p.csrAddress, p.len, payload);
+          // maintain light state by updating at least once per second
+          // TODO: do I need to await/promise packetBuf?
+          self.addToPublishQueue(packetBuf);
+        })();
+      }
     }
-
-    // Generate new pro4 packet for each address and send to all light modules
-    for (let i = 0; i < p2.pro4Addresses.length; i++) {
-      (function() {
-        let j = i;  // loop closure
-        // Packet len = Header + 4-byte CRC + payload + 4-byte CRC = 27
-        let packetBuf = self.parser.encode(p2.pro4Sync, p2.pro4Addresses[j], p2.flags, p2.csrAddress, p2.len, clumpPayload);
-        // maintain light state by updating at least once per second
-        self.addToPublishQueue(packetBuf);
-      })();
-    }
-
-    // Emit status update
-    // this.emit( 'status', this.parseStatus( result ) );
-    //this.emit( 'status', this.parseStatus( result ) );
   }
 
   updateMotors()
@@ -1467,10 +1457,10 @@ class Bridge extends EventEmitter
     logger.debug('BRIDGE: Sent Crumb644 NOOP request');
   }
 
-  updateServos(value)
+  updateServos(nodeId, value)
   {
     // we only care about servo 1 at the moment
-
+    logger.debug(`BRIDGE: Updating servo on sensor ID ${nodeId} to value ${value}`);
     let self = this;
     // shorter name for easier reading
     let p = self.sensors.pro4;
@@ -1478,22 +1468,20 @@ class Bridge extends EventEmitter
     let payload = new Buffer.allocUnsafe(p.lenBam);
 
     p.bamPayload.copy(payload);
+    if (!(value === 0x0a00 || value === 0x0600))
+      value = 0;
     payload.writeUInt16LE(value, 6);            // payload servo1
     payload.writeUInt16LE(p.payloadServo2, 8);  // payload servo2
     payload.writeUInt8(p.payloadGpio, 10);      // payload gpio
 
     // Generate new pro4 packet for each address and send to all modules
-    for (let i = 0; i < p.pro4Addresses.length; i++) {
-      (function() {
-        let j = i;  // loop closure
-        // Packet len = Header + 1-byte CRC + payload + 1-byte CRC = 14
-        let packetBuf = self.parser.encode(p.pro4Sync, p.pro4Addresses[j], p.flags, p.csrAddress, p.lenBam, payload);
-        self.addToPublishQueue(packetBuf);
-      })();
-    }
+    // Packet len = Header + 1-byte CRC + payload + 1-byte CRC = 14
+    let packetBuf = self.parser.encode(p.pro4Sync, nodeId, p.flags, p.csrAddress, p.lenBam, payload);
+    self.addToPublishQueue(packetBuf);
   }
 
-  // Updates power supply values, IMU, depth sensors, etc. after request
+  // Updates nav sensor state values, IMU, depth sensors, etc. if reply to
+  // requestSensors() comes from the pilot device
   updateSensors(parsedObj)
   {
     logger.debug('BRIDGE: Updating sensors');
@@ -1547,6 +1535,94 @@ class Bridge extends EventEmitter
       self.emitStatus(result);
       self.sensors.changed = 0;
     }
+  }
+
+  // handle MQTT messages from the ROV
+  handleRovMqtt(topic, message)
+  {
+    let self = this;
+    // use client-specific topic and pass handling to appropriate parser
+    let clientId = topic.split('/', 2)[1];
+    let clientIp;
+    if (self.mqttConfigId.hasOwnProperty(clientId))
+      clientIp = self.mqttConfigId[clientId];
+    // only send messages from elphel gateways to parser
+    if (clientId.match('elphel.*') !== null
+        && self.mqttConfig[clientIp].receiveMqtt === true) {
+      let parsedObj = self.parser.parse(message);
+      if (parsedObj.status == pro4.constants.STATUS_SUCCESS)
+      {
+        let status = '';
+        logger.debug('BRIDGE: Successfully parsed ROV PRO4 packet, advancing job queue; message = ', message.toString('hex'));
+        self.jobs[clientId].cb(); // advance queue
+
+        if (parsedObj.type == 'pilot')
+        {
+          self.updateSensors(parsedObj); // handles IMU calculations and sending sensor data to cockpit
+        }
+        // send parsed device data to browser telemetry plugin
+        for (let prop in parsedObj.device)
+        {
+          if (typeof parsedObj.device[prop] == 'object')
+          {
+            for (let i = 0; i < parsedObj.device[prop].length; i++)
+            {
+              status += `${parsedObj.type}.${prop}.${parsedObj.id}.${i}:${parsedObj.device[prop]};`;
+            }
+          }
+          else
+          {
+            status += `${parsedObj.type}.${prop}.${parsedObj.id}:${parsedObj.device[prop]};`;
+          }
+        }
+        self.emitStatus(status);
+      }
+      else if (parsedObj.status == pro4.constants.STATUS_MOREDATA)
+      {
+        logger.debug('BRIDGE: Waiting for more data; message = ', message.toString('hex'));
+      }
+      else if (parsedObj.status == pro4.constants.STATUS_ERROR)
+      {
+        logger.warn('BRIDGE: Error in PRO4 message parser; message = ', message.toString('hex'));
+        self.jobs[clientId].cb(); // advance queue
+      }
+      else // invalid status
+      {
+        logger.warn('BRIDGE: Invalid PRO4 parser status = ', parsedObj.status, ' ; message = ', message.toString('hex'));
+      }
+    }
+  }
+
+  // handle ROV light control requests
+  // Topic format: light/<nodeId>
+  // Message contains power value
+  handleLightMqtt(topic, message)
+  {
+    let self = this;
+    let nodeId = topic.split('/', 2)[1];
+    let power = parseInt(message);
+
+    // validate values
+    power = Math.max(power, 0);
+    power = Math.min(power, 1.0);
+    if (self.rovLights.devices.hasOwnProperty(nodeId)) {
+      self.rovLights.devices[nodeId].power = power;
+    }
+    logger.warn('BRIDGE: Received light control message for invalid nodeId ', nodeId);
+  }
+
+  // handle ROV servo control requests
+  // Topic format: servo/<nodeId>
+  // Accept only valid messages, send valid values to device
+  handleServoMqtt(topic, message)
+  {
+    let self = this;
+    let nodeId = topic.split('/', 2)[1];
+    let value = parseInt(message);
+    if (value === 1 || value === 0x6000)
+      self.updateServos(nodeId, 0x6000);
+    else if (value === -1 || value === 0xa000)
+      self.updateServos(nodeId, 0xa000);
   }
 }
 

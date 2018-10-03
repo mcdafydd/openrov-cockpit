@@ -165,10 +165,12 @@
                         resolution:         info.resolution,
                         framerate:          info.framerate,
                         wspath:             "",
-                        relativeServiceUrl: `:${info.port}`,
+                        relativeServiceUrl: `:${info.port}/?action=stream`,
+                        //relativeServiceUrl: `:${info.port}`,
                         sourcePort:         info.port,
                         sourceAddress:      "",
-                        connectionType:     info.connectionType
+                        connectionType:     'http'
+                        //connectionType:     info.connectionType
                     });
                 })
             }

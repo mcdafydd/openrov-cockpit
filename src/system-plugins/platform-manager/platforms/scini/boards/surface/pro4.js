@@ -319,7 +319,17 @@ class Pro4
         this.parsedObj.type = 'motors';
         return(this.ParserMotors.parse(this.parsedObj.payload));
       }
+      case 41:
+      {
+        this.parsedObj.type = 'sensors';
+        return(this.ParserBam.parse(this.parsedObj.payload));
+      }
       case 42:
+      {
+        this.parsedObj.type = 'sensors';
+        return(this.ParserBam.parse(this.parsedObj.payload));
+      }
+      case 43:
       {
         this.parsedObj.type = 'sensors';
         return(this.ParserBam.parse(this.parsedObj.payload));
@@ -332,6 +342,21 @@ class Pro4
       case 52:
       {
         this.parsedObj.type = 'pilot';
+        return(this.ParserBam.parse(this.parsedObj.payload));
+      }
+      case 53:
+      {
+        this.parsedObj.type = 'sensors';
+        return(this.ParserBam.parse(this.parsedObj.payload));
+      }
+      case 54:
+      {
+        this.parsedObj.type = 'sensors';
+        return(this.ParserBam.parse(this.parsedObj.payload));
+      }
+      case 55:
+      {
+        this.parsedObj.type = 'sensors';
         return(this.ParserBam.parse(this.parsedObj.payload));
       }
       case 61:
