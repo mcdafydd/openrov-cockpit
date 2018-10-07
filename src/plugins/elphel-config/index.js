@@ -386,7 +386,7 @@
           this.listeners.sayHello.enable();
           this.listeners.temp.enable();
 
-          this.camTempInterval = setInterval(() => { return this.requestCamTemp(); }, 5000);
+          //this.camTempInterval = setInterval(() => { return this.requestCamTemp(); }, 5000);
         }
 
         // This is called when the plugin is disabled
@@ -404,7 +404,7 @@
           this.listeners.sayHello.disable();
           this.listeners.temp.disable();
 
-          clearInterval(this.camTempInterval);
+          //clearInterval(this.camTempInterval);
         }
 
         // This is used to define user settings for the plugin. We populated some elphel-config properties below.
