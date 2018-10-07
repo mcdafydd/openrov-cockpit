@@ -1558,7 +1558,7 @@ class Bridge extends EventEmitter
 
         if (parsedObj.type == 'pilot')
         {
-          self.updateSensors(parsedObj); // handles IMU calculations and sending sensor data to cockpit
+          self.updateSensors(parsedObj); // handles IMU calculations and sending sensor data to cockpit widgets
         }
         // send parsed device data to browser telemetry plugin
         for (let prop in parsedObj.device)

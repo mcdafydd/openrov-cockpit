@@ -228,6 +228,9 @@ class Pro4
       .int16le('rot_x')
       .int16le('rot_y')
       .int16le('rot_z')
+      .uint32le('uptimeMillis')
+      .int32le('imuPressure')
+      .int16le('imuTemp')
 
     this.fsm = this.createStateMachine();
   };
