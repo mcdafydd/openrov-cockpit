@@ -91,7 +91,7 @@
                         // Send command to camera
                         if (cameraIp === 'pilot')
                             cameraIp = process.env['EXTERNAL_CAM_IP'];
-                        request({timeout: 1000, uri:`http://${cameraIp}/setparameters_demo.php?BCH_HOR=${resolution}&BIN_VERT=${resolution}&DCM_HOR=${resolution}&DCM_VERT=${resolution}`}, function (err, response, body) {
+                        request({timeout: 2000, uri:`http://${cameraIp}/setparameters_demo.php?BCH_HOR=${resolution}&BIN_VERT=${resolution}&DCM_HOR=${resolution}&DCM_VERT=${resolution}`}, function (err, response, body) {
                             if (response && response.statusCode == 200) {
                                 deps.logger.debug(`ELPHEL-CONFIG: Set resolution 1/${resolution} on camera ${cameraIp}`);
                                 if (self.cameraMap.hasOwnProperty(cameraIp))
@@ -113,7 +113,7 @@
                         // Send command to camera
                         if (cameraIp === 'pilot')
                             cameraIp = process.env['EXTERNAL_CAM_IP'];
-                        request({timeout: 1000, uri:`http://${cameraIp}/setparameters_demo.php?QUALITY=${quality}`}, function (err, response, body) {
+                        request({timeout: 2000, uri:`http://${cameraIp}/setparameters_demo.php?QUALITY=${quality}`}, function (err, response, body) {
                             if (response && response.statusCode == 200) {
                                 deps.logger.debug(`ELPHEL-CONFIG: Setting JPEG quality ${quality}% on camera ${cameraIp}`);
                                 if (self.cameraMap.hasOwnProperty(cameraIp))
@@ -144,7 +144,7 @@
                                 newExposure = exposure * 1000; // value should be in microseconds
                             }
                         }
-                        request({timeout: 1000, uri:`http://${cameraIp}/setparameters_demo.php?EXPOS=${newExposure}`}, function (err, response, body) {
+                        request({timeout: 2000, uri:`http://${cameraIp}/setparameters_demo.php?EXPOS=${newExposure}`}, function (err, response, body) {
                             if (response && response.statusCode == 200) {
                                 deps.logger.debug(`ELPHEL-CONFIG: Setting exposure ${newExposure}us on camera ${cameraIp}`);
                                 if (self.cameraMap.hasOwnProperty(cameraIp))
@@ -173,7 +173,7 @@
                         id = self.cameraMap[cameraIp].id;
                         // request() will follow redirects by default
                         let url = `http://${cameraIp}/snapfull.php`;
-                        request({timeout: 1000, uri: url}, {encoding: 'binary'}, function(err, response, body) {
+                        request({timeout: 2000, uri: url}, {encoding: 'binary'}, function(err, response, body) {
                             if (response && response.statusCode == 200) {
                                 deps.logger.debug(`ELPHEL-CONFIG: Snapped full resolution image from camera ${cameraIp}`);
                                 fs.writeFile(`/opt/openrov/images/${ts}/${id}/${filename.toISOString()}_full.jpg`, body, 'binary', function (err) {
@@ -194,7 +194,7 @@
                         // Send command to camera
                         if (cameraIp === 'pilot')
                             cameraIp = process.env['EXTERNAL_CAM_IP'];
-                        request({timeout: 1000, uri:`http://${cameraIp}/setparameters_demo.php?COLOR=${color}`}, function (err, response, body) {
+                        request({timeout: 2000, uri:`http://${cameraIp}/setparameters_demo.php?COLOR=${color}`}, function (err, response, body) {
                             if (response && response.statusCode == 200) {
                                 deps.logger.debug(`ELPHEL-CONFIG: Set color ${colorText} on camera ${cameraIp}`);
                             }
@@ -220,7 +220,7 @@
                     }
                     let prop = `camTemp.${port}`;
                     let statusobj = {};
-                    request({timeout: 1000, uri:`http://${cameraIp}/${onBoardTemp}`}, function (err, response, body) {
+                    request({timeout: 2000, uri:`http://${cameraIp}/${onBoardTemp}`}, function (err, response, body) {
                         if (response && response.statusCode == 200) {
                             parseString(body, function (err, result) {
                                 if (result) {
