@@ -637,8 +637,8 @@
     },
     "mjpeg-video-server": {
       "version": "2.0.0",
-      "from": "git+https://github.com/mcdafydd/mjpeg-video-server.git#07e7a23b995f1d007c7916ba6780559231401dfe",
-      "resolved": "git+https://github.com/mcdafydd/mjpeg-video-server.git#07e7a23b995f1d007c7916ba6780559231401dfe"
+      "from": "git+https://github.com/mcdafydd/mjpeg-video-server.git#72d53697278f9ea0bda48e1c040caae2f5a2ce50",
+      "resolved": "git+https://github.com/mcdafydd/mjpeg-video-server.git#72d53697278f9ea0bda48e1c040caae2f5a2ce50"
     },
     "mqtt": {
       "version": "2.18.8",
@@ -1020,14 +1020,14 @@
       }
     },
     "spdx-correct": {
-      "version": "3.0.0",
+      "version": "3.0.2",
       "from": "spdx-correct@>=3.0.0 <4.0.0",
-      "resolved": "https://registry.npmjs.org/spdx-correct/-/spdx-correct-3.0.0.tgz"
+      "resolved": "https://registry.npmjs.org/spdx-correct/-/spdx-correct-3.0.2.tgz"
     },
     "spdx-exceptions": {
-      "version": "2.1.0",
+      "version": "2.2.0",
       "from": "spdx-exceptions@>=2.1.0 <3.0.0",
-      "resolved": "https://registry.npmjs.org/spdx-exceptions/-/spdx-exceptions-2.1.0.tgz"
+      "resolved": "https://registry.npmjs.org/spdx-exceptions/-/spdx-exceptions-2.2.0.tgz"
     },
     "spdx-expression-parse": {
       "version": "3.0.0",
