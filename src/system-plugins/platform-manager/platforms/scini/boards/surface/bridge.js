@@ -1466,14 +1466,15 @@ class Bridge extends EventEmitter
     let p = self.sensors.pro4;
 
     let payload = new Buffer.allocUnsafe(p.lenBam);
-
     p.bamPayload.copy(payload);
-    if (!(value === 0x0a00 || value === 0x0600))
+
+    if (!(value === 0xa000 || value === 0x6000))
       value = 0;
     payload.writeUInt16LE(value, 6);            // payload servo1
     payload.writeUInt16LE(p.payloadServo2, 8);  // payload servo2
     payload.writeUInt8(p.payloadGpio, 10);      // payload gpio
 
+    nodeId = parseInt(nodeId);
     // Generate new pro4 packet for each address and send to all modules
     // Packet len = Header + 1-byte CRC + payload + 1-byte CRC = 14
     let packetBuf = self.parser.encode(p.pro4Sync, nodeId, p.flags, p.csrAddress, p.lenBam, payload);
@@ -1600,8 +1601,9 @@ class Bridge extends EventEmitter
   {
     let self = this;
     let nodeId = topic.split('/', 2)[1];
-    let power = parseInt(message);
+    let power = parseFloat(message);
 
+    logger.debug(`BRIDGE: Updating light power on node ID ${nodeId} to value ${power}`);
     // validate values
     power = Math.max(power, 0);
     power = Math.min(power, 1.0);
