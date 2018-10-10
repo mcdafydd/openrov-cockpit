@@ -144,6 +144,22 @@ class Pro4
       .uint8('fault');
 
     // VideoRay PRO4 light module response payload
+    this.ParserKeller = new Parser()
+      .uint8('cmd')
+      .uint32le('uptime')
+      .uint8('status')
+      .floatle('pressure')
+      .floatle('temp');
+
+    // VideoRay PRO4 light module response payload
+    this.ParserLaser = new Parser()
+      .uint8('cmd')
+      .uint32le('uptime')
+      .uint8('status')
+      .floatle('pressure')
+      .floatle('temp');
+
+    // VideoRay PRO4 light module response payload
     this.ParserGrippers = new Parser()
       .uint8('cmd')
       .uint8('cmdStatus')
@@ -401,6 +417,21 @@ class Pro4
       {
         this.parsedObj.type = 'trim';
         return(this.ParserGrippers.parse(this.parsedObj.payload));
+      }
+      case 81:
+      {
+        this.parsedObj.type = 'keller';
+        return(this.ParserKeller.parse(this.parsedObj.payload));
+      }
+      case 82:
+      {
+        this.parsedObj.type = 'laser';
+        return(this.ParserLaser.parse(this.parsedObj.payload));
+      }
+      case 83:
+      {
+        this.parsedObj.type = 'reserved';
+        return({});
       }
       default:
       {

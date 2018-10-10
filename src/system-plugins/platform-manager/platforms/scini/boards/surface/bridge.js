@@ -144,7 +144,7 @@ class Bridge extends EventEmitter
       },
       pro4:             {
         pro4Sync:       pro4.constants.SYNC_REQUEST8LE,
-        pro4Addresses:  [41, 42, 43, 51, 52, 53, 54, 55], // ps crumbs = 41-43, camera crumbs = 51-55; 64 spare address
+        pro4Addresses:  [51, 52, 53, 54, 55], // ps crumbs = 41-43, camera crumbs = 51-55; 64 spare address
         flags:          0x00,       // or 0x80
         csrAddress:     0xf0,       // custom command address
         lenNoop:        6,          // no write, just read all values
@@ -167,6 +167,38 @@ class Bridge extends EventEmitter
     this.sensors.pro4.bamPayload.writeUInt32BE(this.sensors.pro4.payloadHeader, 0);    // "SCNI"
     this.sensors.pro4.bamPayload.writeUInt8(this.sensors.pro4.payloadLenBam, 4);       // payload len
     this.sensors.pro4.bamPayload.writeUInt8(this.sensors.pro4.payloadCmdBam, 5);       // payload cmd
+
+    // separate board used to convert PRO4 to serial device communication
+    this.boards44 = {
+      updateInterval:   1000,       // loop interval in ms
+      devices:           {
+        81:             {
+          name:         'keller',
+          location:     'rov',
+          commands:     [4],
+          len:          1
+        },
+        82:             {
+          name:         'laser',
+          location:     'rov',
+          commands:     [],
+          len:          1
+        },
+        83:             {
+          name:         'reserved',
+          location:     'rov',
+          commands:     [],
+          len:          1
+        }
+      },
+      pro4:             {
+        pro4Sync:       pro4.constants.SYNC_REQUEST8LE,
+        pro4Addresses:  [81, 82, 83], // ps crumbs = 41-43, camera crumbs = 51-55; 64 spare address
+        flags:          0x00,       // or 0x80
+        csrAddress:     0xf0,       // custom command address
+        len:            1      // command payload is just a single byte
+      }
+    }
 
     this.rovLights = {
       time:             0,
@@ -321,6 +353,7 @@ class Bridge extends EventEmitter
 
     // Add SCINI device control interval functions
     self.sensorInterval = setInterval( function() { return self.requestSensors(); },          self.sensors.updateInterval );
+    self.boards44Interval = setInterval( function() { return self.requestBoards44(); },          self.boards44.updateInterval );
     self.navInterval = setInterval( function() { return self.updateNav(); },          self.sensors.navInterval );
     self.lightsInterval = setInterval( function() { return self.updateLights(); },       self.rovLights.updateInterval );
     self.motorInterval = setInterval( function() { return self.updateMotors(); },     self.motorControl.updateInterval );
@@ -479,6 +512,7 @@ class Bridge extends EventEmitter
 
     // Remove status interval functions
     clearInterval( self.sensorInterval );
+    clearInterval( self.boards44Interval );
     clearInterval( self.navInterval );
     clearInterval( self.lightsInterval );
     clearInterval( self.motorInterval );
@@ -1457,6 +1491,28 @@ class Bridge extends EventEmitter
     logger.debug('BRIDGE: Sent Crumb644 NOOP request');
   }
 
+  // send boards44 request
+  requestBoards44()
+  {
+    let self = this;
+
+    // shorter name for easier reading
+    let p = self.boards44.pro4;
+    let payload;
+
+    for (let nodeId in self.boards44.devices) {
+      for (let i = 0; i < self.boards44.devices[nodeId].commands.length; i++) {
+        let cmd = self.boards44.devices[nodeId].commands[i];
+        let len = self.boards44.devices[nodeId].len;
+        payload = new Buffer.allocUnsafe(len);
+        payload.writeUInt8(cmd, 0);
+        let packetBuf = self.parser.encode(p.pro4Sync, p.pro4Addresses[i], p.flags, p.csrAddress, p.len, payload);
+        self.addToPublishQueue(packetBuf);
+        logger.debug(`BRIDGE: Queued Boards44 command ${cmd} for nodeId ${nodeId}`);
+      }
+    }
+  }
+
   updateServos(nodeId, value)
   {
     // we only care about servo 1 at the moment
@@ -1488,21 +1544,37 @@ class Bridge extends EventEmitter
     logger.debug('BRIDGE: Updating sensors');
     let self = this;
     let p = parsedObj.device;
-    let density = 1024; // kg/m^3
-    let gravity = 9.80665; // m/s^2 - should add local gravity anomaly
-    let depth = p.kellerPressure/(density*gravity); // assumes pressure in pascals
     // Update time
     self.sensors.time += self.sensors.timeDelta_ms;
 
     // apply additional sensor transformations here, if needed
-    self.sensors.depth.temp = p.kellerTemperature;
-    self.sensors.depth.pressure = p.kellerPressure;
-    self.sensors.depth.depth = depth;
     self.sensors.imu.pitch = p.angle_y;
     self.sensors.imu.roll = p.angle_x;
     self.sensors.imu.yaw = 0;  // ignore yaw for now
 
     self.sensors.changed = 1;
+  }
+
+  // Updates nav sensor state values, IMU, depth sensors, etc. if reply to
+  // requestSensors() comes from the pilot device
+  updateKeller(parsedObj)
+  {
+    logger.debug('BRIDGE: Updating depth/pressure');
+    let self = this;
+    let p = parsedObj.device;
+    let density = 1024; // kg/m^3
+    let gravity = 9.80665; // m/s^2 - should add local gravity anomaly
+    let depth;
+
+    // ignore data for any other status value
+    if (p.status === 0x40) {
+      depth = (p.pressure*100000)/(density*gravity); // assumes pressure in bar
+      self.sensors.depth.temp = p.temp;
+      self.sensors.depth.pressure = p.pressure;
+      self.sensors.depth.depth = depth;
+
+      self.sensors.changed = 1;
+    }
   }
 
   // Send power supply values, IMU, depth sensors, etc. to browser
@@ -1560,6 +1632,10 @@ class Bridge extends EventEmitter
         if (parsedObj.type == 'pilot')
         {
           self.updateSensors(parsedObj); // handles IMU calculations and sending sensor data to cockpit widgets
+        }
+        else if (parsedObj.type == 'keller')
+        {
+          self.updateKeller(parsedObj); // handles depth calculations and sending data to cockpit widgets
         }
         // send parsed device data to browser telemetry plugin
         for (let prop in parsedObj.device)
