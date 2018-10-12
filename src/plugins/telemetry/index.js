@@ -1,6 +1,6 @@
 function telemetry(name, deps) {
 
-  const mqtt       = require( 'mqtt' );
+  const mqtt       = require('mqtt');
   const mqttUri    = 'ws://127.0.0.1:3000';
   let mqttConnected = false;
 
@@ -14,7 +14,13 @@ function telemetry(name, deps) {
           continue;
         }
       }
-      statusdata[i] = data[i];
+      if (i === 'depth_p' || i === 'depth_t' || i === 'depth_d'
+          || i === 'imu_r' || i === 'imu_p' || i === 'imu_y')
+      {
+        statusdata[i] = data[i] * 0.001;
+      }
+      else
+        statusdata[i] = data[i];
     }
   });
   setInterval(function () {
