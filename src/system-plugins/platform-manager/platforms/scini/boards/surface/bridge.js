@@ -174,14 +174,14 @@ class Bridge extends EventEmitter
       devices:           {
         81:             {
           name:         'keller',
-          location:     'rov',
+          location:     'clump',
           commands:     [4],
           len:          1
         },
         82:             {
-          name:         'laser',
+          name:         'keller and laser',
           location:     'rov',
-          commands:     [],
+          commands:     [4],
           len:          1
         },
         83:             {
@@ -389,6 +389,7 @@ class Bridge extends EventEmitter
       self.client.subscribe('vehicle/+'); // receive all vechicle topics
       self.client.subscribe('servo/#'); // receive servo control commands
       self.client.subscribe('light/#'); // receive light control commands
+      self.client.subscribe('grippers/#'); // receive gripper control commands
       self.client.subscribe('fromScini/#'); // receive all messages from the ROV
     });
 
@@ -415,6 +416,9 @@ class Bridge extends EventEmitter
       }
       else if (topic.match('servo/.*') !== null) {
         self.handleServoMqtt(topic, message);
+      }
+      else if (topic.match('grippers/.*') !== null) {
+        self.handleGrippersMqtt(topic, message);
       }
       else {
         logger.info('BRIDGE: No handler for message');
@@ -1686,7 +1690,7 @@ class Bridge extends EventEmitter
     if (self.rovLights.devices.hasOwnProperty(nodeId)) {
       self.rovLights.devices[nodeId].power = power;
     }
-    logger.warn('BRIDGE: Received light control message for invalid nodeId ', nodeId);
+    logger.warn('BRIDGE: Received light control message for nodeId ', nodeId);
   }
 
   // handle ROV servo control requests
@@ -1701,6 +1705,22 @@ class Bridge extends EventEmitter
       self.updateServos(nodeId, 0x6000);
     else if (value === -1 || value === 0xa000)
       self.updateServos(nodeId, 0xa000);
+    else
+      logger.debug('BRIDGE: Received invalid servo control message ', value, ' for nodeId ', nodeId);
+  }
+
+  // handle ROV gripper, sampler, trim control requests
+  // Topic format: grippers/<nodeId>
+  // Accept only valid messages, send valid values to device
+  handleGrippersMqtt(topic, message)
+  {
+    let self = this;
+    let nodeId = topic.split('/', 2)[1];
+    let value = parseInt(message);
+    if (value === 0 || value === 2 || value === 3)
+      self.updateGripper(nodeId, value);
+    else
+      logger.debug('BRIDGE: Received invalid gripper control message ', value, ' for nodeId ', nodeId);
   }
 }
 
