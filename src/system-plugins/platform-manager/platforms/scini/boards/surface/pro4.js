@@ -380,27 +380,27 @@ class Pro4
       }
       case 61:
       {
-        this.parsedObj.type = 'lights';
+        this.parsedObj.type = 'light';
         return(this.ParserLights.parse(this.parsedObj.payload));
       }
       case 62:
       {
-        this.parsedObj.type = 'lights';
+        this.parsedObj.type = 'light';
         return(this.ParserLights.parse(this.parsedObj.payload));
       }
       case 63:
       {
-        this.parsedObj.type = 'lights';
+        this.parsedObj.type = 'light';
         return(this.ParserLights.parse(this.parsedObj.payload));
       }
       case 64:
       {
-        this.parsedObj.type = 'lights';
+        this.parsedObj.type = 'light';
         return(this.ParserLights.parse(this.parsedObj.payload));
       }
       case 66:
       {
-        this.parsedObj.type = 'lights';
+        this.parsedObj.type = 'light';
         return(this.ParserLights.parse(this.parsedObj.payload));
       }
       case 24:

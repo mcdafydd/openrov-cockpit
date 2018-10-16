@@ -142,9 +142,31 @@ class Bridge extends EventEmitter
         temp:         0,
         pressure:     0
       },
+      devices:           {
+        51:             {
+          center:       0x8000,
+          speed:        8192
+        },
+        52:             {
+          center:       0x8000,
+          speed:        8192
+        },
+        57:             {
+          center:       0x8000,
+          speed:        8192
+        },
+        58:             {
+          center:       0x8000,
+          speed:        8192
+        },
+        67:             {
+          center:       0x8000,
+          speed:        8192
+        }
+      },
       pro4:             {
         pro4Sync:       pro4.constants.SYNC_REQUEST8LE,
-        pro4Addresses:  [51, 52, 53, 54, 55], // ps crumbs = 41-43, camera crumbs = 51-55; 64 spare address
+        pro4Addresses:  [51, 52, 57, 58, 67], // aka "camera crumbs"
         flags:          0x00,       // or 0x80
         csrAddress:     0xf0,       // custom command address
         lenNoop:        6,          // no write, just read all values
@@ -154,8 +176,6 @@ class Bridge extends EventEmitter
         payloadLenBam:  7,          // send write to control servos, GPIOs
         payloadCmdNoop: 0,          // no write, just read all values
         payloadCmdBam:  0x02,       // send write to control servos, GPIOs
-        payloadServo1:  0x0000,     // 2 byte servo 1 angle
-        payloadServo2:  0x0000,     // 2 byte servo 2 angle
         payloadGpio:    0x00,       // 1 byte output bits
         noopPayload:    new Buffer.allocUnsafe(6),  // value should equal lenNoop
         bamPayload:     new Buffer.allocUnsafe(11)  // value should equal lenBam
@@ -186,6 +206,12 @@ class Bridge extends EventEmitter
         },
         83:             {
           name:         'reserved',
+          location:     'rov',
+          commands:     [],
+          len:          1
+        },
+        85:             {
+          name:         'ctsensor',
           location:     'rov',
           commands:     [],
           len:          1
@@ -641,8 +667,8 @@ class Bridge extends EventEmitter
         power = Math.min(power, 1.0);
 
 	      // Ack command
-        self.emitStatus('lights_tpow:' + parameters[0] );
-        self.emitStatus('lights.currentPower:' + parameters[0] );
+        self.emitStatus('light_tpow:' + parameters[0] );
+        self.emitStatus('light.61.currentPower:' + parameters[0] );
 
         // Update state object to be sent on next packet interval
         self.rovLights.devices['61'].power = power;
@@ -650,7 +676,7 @@ class Bridge extends EventEmitter
         // Ack command
         setTimeout( function()
         {
-          self.emitStatus('lights_pow:' + power );
+          self.emitStatus('light_pow:' + power );
         }, 250 );
 
         break;
@@ -1519,8 +1545,6 @@ class Bridge extends EventEmitter
 
   updateServos(nodeId, value)
   {
-    // we only care about servo 1 at the moment
-    logger.debug(`BRIDGE: Updating servo on sensor ID ${nodeId} to value ${value}`);
     let self = this;
     // shorter name for easier reading
     let p = self.sensors.pro4;
@@ -1528,10 +1552,12 @@ class Bridge extends EventEmitter
     let payload = new Buffer.allocUnsafe(p.lenBam);
     p.bamPayload.copy(payload);
 
-    if (!(value === 0xa000 || value === 0x6000))
-      value = 0;
+    if (value < 0) value = 0;
+    else if (value > 0xffff) value = 0xffff;
+    // we only care about servo 1 at the moment
+    logger.debug(`BRIDGE: Updating servo on sensor ID ${nodeId} to value ${value}`);
     payload.writeUInt16LE(value, 6);            // payload servo1
-    payload.writeUInt16LE(p.payloadServo2, 8);  // payload servo2
+    payload.writeUInt16LE(0x0000, 8);           // payload servo2
     payload.writeUInt8(p.payloadGpio, 10);      // payload gpio
 
     nodeId = parseInt(nodeId);
@@ -1567,7 +1593,7 @@ class Bridge extends EventEmitter
     let self = this;
     let p = parsedObj.device;
     let density = 1024; // kg/m^3
-    let gravity = 9.80665; // m/s^2 - should add local gravity anomaly
+    let gravity = 9.83143461; // m/s^2 - Intl. gravity formula at -83.1 latitude
     let depth;
 
     // ignore data for any other status value
@@ -1689,24 +1715,37 @@ class Bridge extends EventEmitter
     power = Math.min(power, 1.0);
     if (self.rovLights.devices.hasOwnProperty(nodeId)) {
       self.rovLights.devices[nodeId].power = power;
+      // echo new value back to telemetry plugin / browser clients
+      self.emitStatus(`light.${nodeId}.currentPower:${self.rovLights.devices[nodeId].power}`);
     }
+
     logger.warn('BRIDGE: Received light control message for nodeId ', nodeId);
   }
 
   // handle ROV servo control requests
-  // Topic format: servo/<nodeId>
+  // Topic format: servo/<nodeId>/<func>
   // Accept only valid messages, send valid values to device
   handleServoMqtt(topic, message)
   {
     let self = this;
-    let nodeId = topic.split('/', 2)[1];
+    let nodeId = topic.split('/', 3)[1];
+    let func = topic.split('/', 3)[2];
     let value = parseInt(message);
-    if (value === 1 || value === 0x6000)
-      self.updateServos(nodeId, 0x6000);
-    else if (value === -1 || value === 0xa000)
-      self.updateServos(nodeId, 0xa000);
+
+    logger.debug(`BRIDGE: Received servo ${func} on node ID ${nodeId} value ${value}`);
+    if (func === 'move')
+      self.updateServos(nodeId, value);
+    else if (func === 'speed') {
+      self.sensors.devices[nodeId].speed = value;
+    }
+    else if (func === 'center') {
+      self.sensors.devices[nodeId].center = value;
+    }
     else
       logger.debug('BRIDGE: Received invalid servo control message ', value, ' for nodeId ', nodeId);
+    // echo new value back to telemetry plugin / browser clients
+    self.emitStatus(`servo.${nodeId}.center:${self.sensors.devices[nodeId].center}`);
+    self.emitStatus(`servo.${nodeId}.speed:${self.sensors.devices[nodeId].speed}`);
   }
 
   // handle ROV gripper, sampler, trim control requests
