@@ -73,9 +73,9 @@
       "resolved": "https://registry.npmjs.org/bluebird/-/bluebird-1.2.4.tgz"
     },
     "body-parser": {
-      "version": "1.18.2",
-      "from": "body-parser@1.18.2",
-      "resolved": "https://registry.npmjs.org/body-parser/-/body-parser-1.18.2.tgz"
+      "version": "1.18.3",
+      "from": "body-parser@1.18.3",
+      "resolved": "https://registry.npmjs.org/body-parser/-/body-parser-1.18.3.tgz"
     },
     "brace-expansion": {
       "version": "1.1.11",
@@ -213,9 +213,9 @@
       "resolved": "https://registry.npmjs.org/destroy/-/destroy-1.0.4.tgz"
     },
     "duplexify": {
-      "version": "3.6.0",
+      "version": "3.6.1",
       "from": "duplexify@>=3.6.0 <4.0.0",
-      "resolved": "https://registry.npmjs.org/duplexify/-/duplexify-3.6.0.tgz"
+      "resolved": "https://registry.npmjs.org/duplexify/-/duplexify-3.6.1.tgz"
     },
     "ee-first": {
       "version": "1.1.1",
@@ -357,9 +357,9 @@
       "resolved": "https://registry.npmjs.org/eventemitter3/-/eventemitter3-2.0.3.tgz"
     },
     "express": {
-      "version": "4.16.3",
+      "version": "4.16.4",
       "from": "express@>=4.13.4 <5.0.0",
-      "resolved": "https://registry.npmjs.org/express/-/express-4.16.3.tgz"
+      "resolved": "https://registry.npmjs.org/express/-/express-4.16.4.tgz"
     },
     "extend": {
       "version": "3.0.2",
@@ -461,9 +461,9 @@
       "resolved": "https://registry.npmjs.org/http-errors/-/http-errors-1.6.3.tgz"
     },
     "iconv-lite": {
-      "version": "0.4.19",
-      "from": "iconv-lite@0.4.19",
-      "resolved": "https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.4.19.tgz"
+      "version": "0.4.23",
+      "from": "iconv-lite@0.4.23",
+      "resolved": "https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.4.23.tgz"
     },
     "indexof": {
       "version": "0.0.1",
@@ -637,8 +637,8 @@
     },
     "mjpeg-video-server": {
       "version": "2.0.0",
-      "from": "git+https://github.com/mcdafydd/mjpeg-video-server.git#e20677edb06bf620b0fe1c82fd1b839f4652e338",
-      "resolved": "git+https://github.com/mcdafydd/mjpeg-video-server.git#e20677edb06bf620b0fe1c82fd1b839f4652e338"
+      "from": "git+https://github.com/mcdafydd/mjpeg-video-server.git#9179c2d0a551430eb5297c4cdcb2a1997df80d7d",
+      "resolved": "git+https://github.com/mcdafydd/mjpeg-video-server.git#9179c2d0a551430eb5297c4cdcb2a1997df80d7d"
     },
     "mqtt": {
       "version": "2.18.8",
@@ -833,9 +833,9 @@
       }
     },
     "qs": {
-      "version": "6.5.1",
-      "from": "qs@6.5.1",
-      "resolved": "https://registry.npmjs.org/qs/-/qs-6.5.1.tgz"
+      "version": "6.5.2",
+      "from": "qs@6.5.2",
+      "resolved": "https://registry.npmjs.org/qs/-/qs-6.5.2.tgz"
     },
     "range-parser": {
       "version": "1.2.0",
@@ -843,26 +843,9 @@
       "resolved": "https://registry.npmjs.org/range-parser/-/range-parser-1.2.0.tgz"
     },
     "raw-body": {
-      "version": "2.3.2",
-      "from": "raw-body@2.3.2",
-      "resolved": "https://registry.npmjs.org/raw-body/-/raw-body-2.3.2.tgz",
-      "dependencies": {
-        "depd": {
-          "version": "1.1.1",
-          "from": "depd@1.1.1",
-          "resolved": "https://registry.npmjs.org/depd/-/depd-1.1.1.tgz"
-        },
-        "http-errors": {
-          "version": "1.6.2",
-          "from": "http-errors@1.6.2",
-          "resolved": "https://registry.npmjs.org/http-errors/-/http-errors-1.6.2.tgz"
-        },
-        "setprototypeof": {
-          "version": "1.0.3",
-          "from": "setprototypeof@1.0.3",
-          "resolved": "https://registry.npmjs.org/setprototypeof/-/setprototypeof-1.0.3.tgz"
-        }
-      }
+      "version": "2.3.3",
+      "from": "raw-body@2.3.3",
+      "resolved": "https://registry.npmjs.org/raw-body/-/raw-body-2.3.3.tgz"
     },
     "read-pkg": {
       "version": "1.1.0",
@@ -912,14 +895,19 @@
       }
     },
     "safe-buffer": {
-      "version": "5.1.1",
-      "from": "safe-buffer@5.1.1",
-      "resolved": "https://registry.npmjs.org/safe-buffer/-/safe-buffer-5.1.1.tgz"
+      "version": "5.1.2",
+      "from": "safe-buffer@5.1.2",
+      "resolved": "https://registry.npmjs.org/safe-buffer/-/safe-buffer-5.1.2.tgz"
+    },
+    "safer-buffer": {
+      "version": "2.1.2",
+      "from": "safer-buffer@>=2.1.2 <3.0.0",
+      "resolved": "https://registry.npmjs.org/safer-buffer/-/safer-buffer-2.1.2.tgz"
     },
     "semver": {
-      "version": "5.5.1",
+      "version": "5.6.0",
       "from": "semver@>=2.0.0 <3.0.0||>=3.0.0 <4.0.0||>=4.0.0 <5.0.0||>=5.0.0 <6.0.0",
-      "resolved": "https://registry.npmjs.org/semver/-/semver-5.5.1.tgz"
+      "resolved": "https://registry.npmjs.org/semver/-/semver-5.6.0.tgz"
     },
     "send": {
       "version": "0.16.2",

@@ -9,9 +9,9 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "mjpeg-video-server": "git+https://github.com/mcdafydd/mjpeg-video-server.git#e20677edb06bf620b0fe1c82fd1b839f4652e338"
+    "mjpeg-video-server": "git+https://github.com/mcdafydd/mjpeg-video-server.git#9179c2d0a551430eb5297c4cdcb2a1997df80d7d"
   },
   "devDependencies": {
-    "mjpeg-video-server": "git+https://github.com/mcdafydd/mjpeg-video-server.git#e20677edb06bf620b0fe1c82fd1b839f4652e338"
+    "mjpeg-video-server": "git+https://github.com/mcdafydd/mjpeg-video-server.git#9179c2d0a551430eb5297c4cdcb2a1997df80d7d"
   }
 }
