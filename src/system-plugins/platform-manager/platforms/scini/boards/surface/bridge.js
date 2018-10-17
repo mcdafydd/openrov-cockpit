@@ -1578,8 +1578,8 @@ class Bridge extends EventEmitter
     self.sensors.time += self.sensors.timeDelta_ms;
 
     // apply additional sensor transformations here, if needed
-    self.sensors.imu.pitch = p.angle_y;
-    self.sensors.imu.roll = p.angle_x;
+    self.sensors.imu.pitch = p.angle_x;
+    self.sensors.imu.roll = p.angle_y;
     self.sensors.imu.yaw = 0;  // ignore yaw for now
 
     self.sensors.changed = 1;
