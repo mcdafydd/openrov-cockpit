@@ -5,6 +5,7 @@
     const mqtt     = require( 'mqtt' );
     const parseString = require('xml2js').parseString;
     const fs       = require( 'fs' );
+    const child    = require( 'child_process' );
 
     class ElphelConfig
     {
@@ -280,6 +281,7 @@
                 this.mqttConnected = true;
                 deps.logger.debug('ELPHEL-CONFIG: MQTT broker connection established!');
                 this.client.subscribe('toCamera/#'); // receive all camera control requests
+                this.client.subscribe('video/restart');
             });
 
             this.client.on('reconnect', () => {
@@ -357,6 +359,16 @@
                     self.cameraMap[val[1]].port = val[0];
                     self.cameraMap[val[1]].id = val[2]; // either 'pilot' or last IP address octet
                     self.cameraMap[val[1]].ts = val[3]; // timestamp used for image record directory
+                }
+                else if (topic.match('video/restart') !== null)
+                {
+                  child.exec('killall mjpg_streamer', { timeout: 1000 }, (error, stdout, stderr) => {
+                    if (error) {
+                      deps.logger.error(`ELPHEL-CONFIG: Error ${error} trying to restart mjpg_streamer processes`);
+                      return;
+                    }
+                    deps.logger.info('ELPHEL-CONFIG: Restarted mjpg_streamer processes');
+                  });
                 }
             });
         }
