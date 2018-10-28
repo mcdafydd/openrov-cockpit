@@ -1539,9 +1539,9 @@ class Bridge extends EventEmitter
           // command 3 needs the ASCII string to send to the device
           payload.write('00:#030\r\n',1);
         }
-        let packetBuf = self.parser.encode(p.pro4Sync, p.pro4Addresses[i], p.flags, p.csrAddress, p.len, payload);
+        let packetBuf = self.parser.encode(p.pro4Sync, parseInt(nodeId), p.flags, p.csrAddress, len, payload);
         self.addToPublishQueue(packetBuf);
-        logger.debug(`BRIDGE: Queued Boards44 command ${cmd} for nodeId ${nodeId}`);
+        logger.debug(`BRIDGE: Queued Boards44 command ${cmd} for nodeId ${nodeId}, buf = ${packetBuf.toString('hex')}`);
       }
     }
   }

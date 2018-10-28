@@ -155,10 +155,7 @@ class Pro4
     this.ParserCtsensor = Parser.start()
       .string('ct', {
         encoding: 'ascii',
-        greedy: true,
-        length: function() {
-          return this.length;
-        }
+        length: 33
        });
 
     // Board 44 BAM data status response payload
