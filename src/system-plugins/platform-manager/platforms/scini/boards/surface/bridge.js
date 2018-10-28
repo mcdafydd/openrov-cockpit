@@ -72,7 +72,6 @@ else {
   mqttConfigFile = fs.readFileSync('/opt/openrov/config/mqttConfig.json');
 }
 
-
 class Bridge extends EventEmitter
 {
   constructor( mqttBrokerIp, globalBus )
@@ -205,21 +204,21 @@ class Bridge extends EventEmitter
           len:          1
         },
         83:             {
-          name:         'reserved',
+          name:         'ctsensor',
           location:     'rov',
-          commands:     [],
-          len:          1
+          commands:     [3],
+          len:          10
         },
         85:             {
           name:         'ctsensor',
           location:     'rov',
           commands:     [],
-          len:          1
+          len:          10
         }
       },
       pro4:             {
         pro4Sync:       pro4.constants.SYNC_REQUEST8LE,
-        pro4Addresses:  [81, 82, 83], // ps crumbs = 41-43, camera crumbs = 51-55; 64 spare address
+        pro4Addresses:  [81, 82, 83, 85],
         flags:          0x00,       // or 0x80
         csrAddress:     0xf0,       // custom command address
         len:            1      // command payload is just a single byte
@@ -1536,6 +1535,10 @@ class Bridge extends EventEmitter
         let len = self.boards44.devices[nodeId].len;
         payload = new Buffer.allocUnsafe(len);
         payload.writeUInt8(cmd, 0);
+        if (cmd === 3) {
+          // command 3 needs the ASCII string to send to the device
+          payload.write('00:#030\r\n',1);
+        }
         let packetBuf = self.parser.encode(p.pro4Sync, p.pro4Addresses[i], p.flags, p.csrAddress, p.len, payload);
         self.addToPublishQueue(packetBuf);
         logger.debug(`BRIDGE: Queued Boards44 command ${cmd} for nodeId ${nodeId}`);
@@ -1663,9 +1666,25 @@ class Bridge extends EventEmitter
         {
           self.updateSensors(parsedObj); // handles IMU calculations and sending sensor data to cockpit widgets
         }
-        else if (parsedObj.type == 'keller')
+        else if (parsedObj.type == 'board44')
         {
-          self.updateKeller(parsedObj); // handles depth calculations and sending data to cockpit widgets
+          if (parsedObj.device.cmd == 3) {
+            let matcher = parsedObj.device.ct.match(/(.*)\t(.*)\t(.*)\r\n/);
+            if (matcher !== null) {
+              parsedObj.device.rolloverCounter = parseInt(matcher[1]);
+              parsedObj.device.temp = parseFloat(matcher[2]);
+              parsedObj.device.conductivity = parseFloat(matcher[3]);
+            }
+          }
+          else if (parsedObj.device.cmd == 4) {
+            self.updateKeller(parsedObj); // handles depth calculations and sending data to cockpit widgets
+          }
+        }
+        else if (parsedObj.type == 'notfound')
+        {
+          logger.warn('BRIDGE: Device ID parser not found for ID = ', parsedObj.id);
+          let msg = message.toString('hex');
+          self.emitStatus(`notfound.${parsedObj.id}:${msg};`);
         }
         // send parsed device data to browser telemetry plugin
         for (let prop in parsedObj.device)

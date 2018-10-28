@@ -35,6 +35,7 @@ const logger        = require('AppFramework.js').logger;
 const Parser        = require('binary-parser').Parser;
 const StateMachine  = require('javascript-state-machine');
 const CRC           = require('crc');
+const nconf         = require('nconf');
 
 // ******************************************************************
 //  Device types are defined by VideoRay
@@ -143,15 +144,61 @@ class Pro4
       .floatle('temp')
       .uint8('fault');
 
-    // VideoRay PRO4 light module response payload
-    this.ParserKeller = new Parser()
-      .uint8('cmd')
+    // Keller sensor module response payload
+    this.ParserKeller = Parser.start()
       .uint32le('uptime')
       .uint8('status')
       .floatle('pressure')
       .floatle('temp');
 
-    // VideoRay PRO4 light module response payload
+    // CT Sensor module response payload
+    this.ParserCtsensor = Parser.start()
+      .string('ct', {
+        encoding: 'ascii',
+        greedy: true,
+        length: function() {
+          return this.length;
+        }
+       });
+
+    // Board 44 BAM data status response payload
+    this.ParserBoard44Bam = Parser.start()
+      .uint32le('uptime')
+      .uint8('status')
+      .floatle('pressure')
+      .floatle('minPressure')
+      .floatle('maxPressure')
+      .uint16le('kellerCust0')
+      .uint16le('kellerCust1')
+      .uint16le('kellerScale0')
+      .floatle('acs764n1')
+      .floatle('acs764n2')
+      .floatle('acs764n3')
+      .floatle('acs764n4')
+      .floatle('adc0')
+      .floatle('adc1')
+      .floatle('adc2')
+      .floatle('adc3')
+      .floatle('adc4')
+      .floatle('adc5')
+      .floatle('adc6')
+      .floatle('adc7');
+
+    let stop = Parser.start();
+    // PRO4 translator 44 board
+    this.ParserBoard44 = new Parser()
+      .uint8('cmd')
+      .choice('data', {
+        tag: 'cmd',
+        choices: {
+          3: this.ParserCtsensor,
+          4: this.ParserKeller,
+          6: this.ParserBoard44Bam
+        },
+        defaultChoice: stop
+      });
+
+    // Laser module response payload
     this.ParserLaser = new Parser()
       .uint8('cmd')
       .uint32le('uptime')
@@ -159,7 +206,7 @@ class Pro4
       .floatle('pressure')
       .floatle('temp');
 
-    // VideoRay PRO4 light module response payload
+    // VideoRay PRO4 gripper module response payload
     this.ParserGrippers = new Parser()
       .uint8('cmd')
       .uint8('cmdStatus')
@@ -338,21 +385,6 @@ class Pro4
         this.parsedObj.type = 'motors';
         return(this.ParserMotors.parse(this.parsedObj.payload));
       }
-      case 41:
-      {
-        this.parsedObj.type = 'sensors';
-        return(this.ParserBam.parse(this.parsedObj.payload));
-      }
-      case 42:
-      {
-        this.parsedObj.type = 'sensors';
-        return(this.ParserBam.parse(this.parsedObj.payload));
-      }
-      case 43:
-      {
-        this.parsedObj.type = 'sensors';
-        return(this.ParserBam.parse(this.parsedObj.payload));
-      }
       case 51:
       {
         this.parsedObj.type = 'sensors';
@@ -363,17 +395,17 @@ class Pro4
         this.parsedObj.type = 'pilot';
         return(this.ParserBam.parse(this.parsedObj.payload));
       }
-      case 53:
+      case 57:
       {
         this.parsedObj.type = 'sensors';
         return(this.ParserBam.parse(this.parsedObj.payload));
       }
-      case 54:
+      case 58:
       {
         this.parsedObj.type = 'sensors';
         return(this.ParserBam.parse(this.parsedObj.payload));
       }
-      case 55:
+      case 67:
       {
         this.parsedObj.type = 'sensors';
         return(this.ParserBam.parse(this.parsedObj.payload));
@@ -393,7 +425,7 @@ class Pro4
         this.parsedObj.type = 'light';
         return(this.ParserLights.parse(this.parsedObj.payload));
       }
-      case 64:
+      case 65:
       {
         this.parsedObj.type = 'light';
         return(this.ParserLights.parse(this.parsedObj.payload));
@@ -420,18 +452,32 @@ class Pro4
       }
       case 81:
       {
-        this.parsedObj.type = 'keller';
-        return(this.ParserKeller.parse(this.parsedObj.payload));
+        this.parsedObj.type = 'board44';
+        let obj = this.ParserBoard44.parse(this.parsedObj.payload);
+        obj = Object.assign({cmd: obj.cmd}, obj.data);
+        logger.debug('KELLER3 = ', obj);
+        return(obj);
       }
       case 82:
       {
-        this.parsedObj.type = 'laser';
-        return(this.ParserLaser.parse(this.parsedObj.payload));
+        this.parsedObj.type = 'board44';
+        let obj = this.ParserBoard44.parse(this.parsedObj.payload);
+        obj = Object.assign({cmd: obj.cmd}, obj.data);
+        return(obj);
       }
       case 83:
       {
-        this.parsedObj.type = 'reserved';
-        return({});
+        this.parsedObj.type = 'board44';
+        let obj = this.ParserBoard44.parse(this.parsedObj.payload);
+        obj = Object.assign({cmd: obj.cmd}, obj.data);
+        return(obj);
+      }
+      case 85:
+      {
+        this.parsedObj.type = 'board44';
+        let obj = this.ParserBoard44.parse(this.parsedObj.payload);
+        obj = Object.assign({cmd: obj.cmd}, obj.data);
+        return(obj);
       }
       default:
       {
