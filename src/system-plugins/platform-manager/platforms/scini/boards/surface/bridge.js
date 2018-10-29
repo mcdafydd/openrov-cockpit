@@ -59,7 +59,9 @@ if (!fs.existsSync(logDir))
 // v5 ref: https://github.com/pinojs/pino/blob/master/docs/extreme.md
 const fd = fs.openSync(`${logDir}/${ts}.log`, 'w');
 const dataLogger = pino({extreme: true}, fs.createWriteStream(null, {fd: fd}));
-dataLogger.level = 'info';
+// CAREFUL! OpenROV's parent pino-arborsculpture level setting affects this logger too!
+// We ALWAYS want dataLogger's messages saved to disk
+dataLogger.level = 'warn'; // default level
 
 let mqttConfigFile;
 if(!fs.existsSync('/opt/openrov/config/mqttConfig.json')
@@ -1303,7 +1305,7 @@ class Bridge extends EventEmitter
     // emit to telemetry plugin
     this.globalBus.emit('mcu.status', txtStatus);
     // Archive telemetry update
-    dataLogger.info(txtStatus);
+    dataLogger.warn(txtStatus);
 
     if (this.emitRawSerial)
     {
