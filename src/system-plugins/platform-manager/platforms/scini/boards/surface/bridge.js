@@ -200,27 +200,51 @@ class Bridge extends EventEmitter
           len:          1
         },
         82:             {
-          name:         'keller and laser',
+          name:         'keller and up-down lasers',
           location:     'rov',
           commands:     [4],
           len:          1
         },
         83:             {
+          name:         'ps3',
+          location:     'rov',
+          commands:     [6],
+          len:          1
+        },
+        84:             {
+          name:         'reserved',
+          location:     'rov',
+          commands:     [],
+          len:          1
+        },
+        85:             {
           name:         'ctsensor',
           location:     'rov',
           commands:     [3],
           len:          10
         },
-        85:             {
-          name:         'ctsensor',
+        86:             {
+          name:         'fwd laser',
           location:     'rov',
           commands:     [],
-          len:          10
+          len:          1
+        },
+        87:             {
+          name:         'ps2',
+          location:     'rov',
+          commands:     [6],
+          len:          1
+        },
+        88:             {
+          name:         'reserved',
+          location:     'rov',
+          commands:     [],
+          len:          1
         }
       },
       pro4:             {
         pro4Sync:       pro4.constants.SYNC_REQUEST8LE,
-        pro4Addresses:  [81, 82, 83, 85],
+        pro4Addresses:  [81, 82, 83, 85, 87],
         flags:          0x00,       // or 0x80
         csrAddress:     0xf0,       // custom command address
         len:            1      // command payload is just a single byte
@@ -1597,19 +1621,12 @@ class Bridge extends EventEmitter
     logger.debug('BRIDGE: Updating depth/pressure');
     let self = this;
     let p = parsedObj.device;
-    let density = 1024; // kg/m^3
-    let gravity = 9.83143461; // m/s^2 - Intl. gravity formula at -83.1 latitude
-    let depth;
 
-    // ignore data for any other status value
-    if (p.status === 0x40) {
-      depth = (p.pressure*100000)/(density*gravity); // assumes pressure in bar
-      self.sensors.depth.temp = p.temp;
-      self.sensors.depth.pressure = p.pressure;
-      self.sensors.depth.depth = depth;
+    self.sensors.depth.temp = p.temp;
+    self.sensors.depth.pressure = p.pressure;
+    self.sensors.depth.depth = p.depth;
 
-      self.sensors.changed = 1;
-    }
+    self.sensors.changed = 1;
   }
 
   // Send power supply values, IMU, depth sensors, etc. to browser
@@ -1678,8 +1695,17 @@ class Bridge extends EventEmitter
               parsedObj.device.conductivity = parseFloat(matcher[3]);
             }
           }
+          // handles keller depth calculations
           else if (parsedObj.device.cmd == 4) {
-            self.updateKeller(parsedObj); // handles depth calculations and sending data to cockpit widgets
+            let density = 1024; // kg/m^3
+            let gravity = 9.83143461; // m/s^2 - Intl. gravity formula at -83.1 latitude
+
+            // ignore data for any other status value
+            if (p.status === 0x40) {
+              parsedObj.device.depth = (p.pressure*100000)/(density*gravity); // assumes pressure in bar
+              if (parsedObj.id == 82)
+                self.updateKeller(parsedObj); // handles sending data to cockpit widget
+            }
           }
         }
         else if (parsedObj.type == 'notfound')

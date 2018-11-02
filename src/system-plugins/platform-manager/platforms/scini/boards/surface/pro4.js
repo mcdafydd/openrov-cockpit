@@ -452,7 +452,6 @@ class Pro4
         this.parsedObj.type = 'board44';
         let obj = this.ParserBoard44.parse(this.parsedObj.payload);
         obj = Object.assign({cmd: obj.cmd}, obj.data);
-        logger.debug('KELLER3 = ', obj);
         return(obj);
       }
       case 82:
@@ -469,7 +468,35 @@ class Pro4
         obj = Object.assign({cmd: obj.cmd}, obj.data);
         return(obj);
       }
+      case 84:
+      {
+        this.parsedObj.type = 'board44';
+        let obj = this.ParserBoard44.parse(this.parsedObj.payload);
+        obj = Object.assign({cmd: obj.cmd}, obj.data);
+        return(obj);
+      }
       case 85:
+      {
+        this.parsedObj.type = 'board44';
+        let obj = this.ParserBoard44.parse(this.parsedObj.payload);
+        obj = Object.assign({cmd: obj.cmd}, obj.data);
+        return(obj);
+      }
+      case 86:
+      {
+        this.parsedObj.type = 'board44';
+        let obj = this.ParserBoard44.parse(this.parsedObj.payload);
+        obj = Object.assign({cmd: obj.cmd}, obj.data);
+        return(obj);
+      }
+      case 87:
+      {
+        this.parsedObj.type = 'board44';
+        let obj = this.ParserBoard44.parse(this.parsedObj.payload);
+        obj = Object.assign({cmd: obj.cmd}, obj.data);
+        return(obj);
+      }
+      case 88:
       {
         this.parsedObj.type = 'board44';
         let obj = this.ParserBoard44.parse(this.parsedObj.payload);
