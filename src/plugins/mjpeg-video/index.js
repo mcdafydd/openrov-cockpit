@@ -168,7 +168,8 @@
                         relativeServiceUrl: `:${info.port}`,
                         sourcePort:         info.port,
                         sourceAddress:      "",
-                        connectionType:     info.connectionType
+                        connectionType:     info.connectionType,
+                        record:             true
                     });
                 })
             }

@@ -133,7 +133,7 @@
                 exposure: new Listener( self.cockpitBus, 'plugin.elphel-config.exposure', false, function( cameraIp, exposure )
                 {
                     let newExposure;
-                    if ((exposure >= 10 && exposure <= 250) || exposure === 1 || exposure === -1) {
+                    if ((exposure >= 10 && exposure <= 300) || exposure === 1 || exposure === -1) {
                         // Send command to camera
                         if (cameraIp === 'pilot')
                             cameraIp = process.env['EXTERNAL_CAM_IP'];
@@ -353,12 +353,14 @@
                     self.cameraMap[val[0]].ipAddress = val[1];
                     self.cameraMap[val[0]].id = val[2]; // either 'pilot' or last IP address octet
                     self.cameraMap[val[0]].ts = val[3]; // timestamp used for image record directory
+                    self.cameraMap[val[0]].record = val[4]; // recording enabled true/false
 
                     if (!self.cameraMap.hasOwnProperty(val[1]))
                         self.cameraMap[val[1]] = {};
                     self.cameraMap[val[1]].port = val[0];
                     self.cameraMap[val[1]].id = val[2]; // either 'pilot' or last IP address octet
                     self.cameraMap[val[1]].ts = val[3]; // timestamp used for image record directory
+                    self.cameraMap[val[1]].record = val[4]; // recording enabled true/false
                 }
                 else if (topic.match('video/restart') !== null)
                 {
