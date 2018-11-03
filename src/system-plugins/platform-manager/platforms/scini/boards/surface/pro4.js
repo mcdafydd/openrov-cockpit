@@ -32,7 +32,7 @@
 */
 
 const logger        = require('AppFramework.js').logger;
-const Parser        = require('binary-parser').Parser;
+const Parser        = require('./lib/binary_parser').Parser;
 const StateMachine  = require('javascript-state-machine');
 const CRC           = require('crc');
 const nconf         = require('nconf');
@@ -155,7 +155,7 @@ class Pro4
     this.ParserCtsensor = Parser.start()
       .string('ct', {
         encoding: 'ascii',
-        length: 33
+        greedy: true
        });
 
     // Board 44 BAM data status response payload

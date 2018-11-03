@@ -1701,8 +1701,8 @@ class Bridge extends EventEmitter
             let gravity = 9.83143461; // m/s^2 - Intl. gravity formula at -83.1 latitude
 
             // ignore data for any other status value
-            if (p.status === 0x40) {
-              parsedObj.device.depth = (p.pressure*100000)/(density*gravity); // assumes pressure in bar
+            if (parsedObj.device.status === 0x40) {
+              parsedObj.device.depth = (parsedObj.device.pressure*100000)/(density*gravity); // assumes pressure in bar
               if (parsedObj.id == 82)
                 self.updateKeller(parsedObj); // handles sending data to cockpit widget
             }
