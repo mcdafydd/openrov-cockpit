@@ -30,7 +30,7 @@ curl -v --connect-timeout 2 $KILL_URL
 
 for OTHER_CAM_IP in $OTHER_CAM_IPS
 do
-  curl -v --connect-timeout 2 'http://${OTHER_CAM_IP}/phpshell.php?command=killall%20mqttclient.paho'
+  curl -v --connect-timeout 2 "http://${OTHER_CAM_IP}/phpshell.php?command=killall%20mqttclient.paho"
 done
 
 sleep 1
