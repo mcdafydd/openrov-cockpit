@@ -294,29 +294,29 @@ class Bridge extends EventEmitter
       time:             0,
       timeDelta_ms:     0,
       updateInterval:   500,  // loop interval in ms
-      grippers:         [
-        {
+      devices:             {
+        21:             {
           name:         "Gripper 1",
-          nodeId:       24,  // PRO4 packet ID
-          state:        0      // 0 (stop), 2 (close), 3 (open)
+          state:        0,
+          i_lim:        0x7fff
         },
-        {
+        23:             {
           name:         "Gripper 2 - water sampler",
-          nodeId:       23,   // PRO4 packet ID
-          state:        0       // 0 (stop), 2 (close), 3 (open)
+          state:        0,
+          i_lim:        0x7fff
         },
-        {
+        24:             {
           name:         "Gripper 3 - trim",
-          nodeId:       21,  // PRO4 packet ID
-          state:        0      // 0 (stop), 2 (close), 3 (open)
-        }
-      ],
+          state:        0,
+          i_lim:        0x7fff
+        },
+      },
       pro4:             {
         pro4Sync:       pro4.constants.SYNC_REQUEST8LE,
         pro4Addresses:  [24, 23, 21], // all updated at same time
         flags:          0x80,  // defined by VideoRay
         csrAddress:     0,     // custom command address
-        len:            1      // command payload is just a single byte
+        len:            4      // command payload is just a single byte
       }
     }
 
@@ -573,7 +573,7 @@ class Bridge extends EventEmitter
     clearInterval( self.motorInterval );
     clearInterval( self.rotateInterval );
     clearInterval( self.dataLoggerInterval );
-    // clearInterval( self.gripperInterval);
+    clearInterval( self.gripperInterval);
 
     self.client.end(false, () => {
       logger.debug('BRIDGE: MQTT self.client.end() returned.');
@@ -878,62 +878,62 @@ class Bridge extends EventEmitter
 
       case 'gripper_open':
       {
-        self.updateGripper(self.gripperControl.grippers[0].nodeId, 2);
+        self.updateGripper(24, 2);
         self.emitStatus(`gripper.open:1;gripper.close:0;`);
         break;
       }
 
       case 'gripper_close':
       {
-        self.updateGripper(self.gripperControl.grippers[0].nodeId, 3);
+        self.updateGripper(24, 3);
         self.emitStatus(`gripper.close:1;gripper.open:0;`);
         break;
       }
 
       case 'gripper_stationary':
       {
-        self.updateGripper(self.gripperControl.grippers[0].nodeId, 0);
+        self.updateGripper(24, 0);
         self.emitStatus(`gripper.stationary:1;gripper.close:0;gripper.open:0;`);
         break;
       }
 
       case 'sampler_open':
       {
-        self.updateGripper(self.gripperControl.grippers[1].nodeId, 2);
+        self.updateGripper(23, 2);
         self.emitStatus(`sampler.open:1;sampler.close:0;`);
         break;
       }
 
       case 'sampler_close':
       {
-        self.updateGripper(self.gripperControl.grippers[1].nodeId, 3);
+        self.updateGripper(23, 3);
         self.emitStatus(`sampler.close:1;sampler.open:0;`);
         break;
       }
 
       case 'sampler_stationary':
       {
-        self.updateGripper(self.gripperControl.grippers[1].nodeId, 0);
+        self.updateGripper(23, 0);
         self.emitStatus(`sampler.stationary:1;sampler.close:0;sampler.open:0;`);
         break;
       }
       case 'trim_open':
       {
-        self.updateGripper(self.gripperControl.grippers[2].nodeId, 2);
+        self.updateGripper(21, 2);
         self.emitStatus(`trim.open:1;trim.close:0;`);
         break;
       }
 
       case 'trim_close':
       {
-        self.updateGripper(self.gripperControl.grippers[2].nodeId, 3);
+        self.updateGripper(21, 3);
         self.emitStatus(`trim.close:1;trim.open:0;`);
         break;
       }
 
       case 'trim_stationary':
       {
-        self.updateGripper(self.gripperControl.grippers[2].nodeId, 0);
+        self.updateGripper(21, 0);
         self.emitStatus(`trim_stationary:1;trim_close:0;trim_open:0;`);
         break;
       }
@@ -1487,20 +1487,16 @@ class Bridge extends EventEmitter
     // Update time
     self.gripperControl.time += self.gripperControl.timeDelta_ms;
 
-    // shorter names for easier reading
-    let g = self.gripperControl.grippers;
+    // shorter name for easier reading
     let p = self.gripperControl.pro4;
 
     // Generate new pro4 packet for each address and send to all
-    for (let i = 0; i < g.length; i++)
+    for (let gripperId in self.gripperControl.devices)
     {
-      (function() {
-        let j = i;  // loop closure
-        // Packet len = 6-byte header + 1-byte CRC = 7
-        let packetBuf = self.parser.encode(p.pro4Sync, g[j].nodeId, p.flags, p.csrAddress, 0, 0);
-        // maintain state by updating at least once per second
-        self.addToPublishQueue(packetBuf);
-      })();
+      // Packet len = 6-byte header + 1-byte CRC = 7
+      let packetBuf = self.parser.encode(p.pro4Sync, parseInt(gripperId), p.flags, p.csrAddress, 0, 0);
+      // maintain state by updating at least once per second
+      self.addToPublishQueue(packetBuf);
     }
   }
 
@@ -1509,13 +1505,23 @@ class Bridge extends EventEmitter
     let self = this;
 
     // shorter names for easier reading
-    let g = self.gripperControl.grippers;
+    let g = self.gripperControl.devices;
     let p = self.gripperControl.pro4;
+    let i_lim;
 
     // Generate new pro4 packet
-    // Packet len = 6-byte header + 1-byte CRC + 1-byte payload + 1-byte CRC = 9
+    // Control+current packet format =
+    // 6B header + 1B CRC + 1B command + 1B flag = 0 + 2B max current + 1B CRC = 12 bytes
+    if (g.hasOwnProperty(id)) {
+      if (g[id].hasOwnProperty('i_lim'))
+        i_lim = g[id].i_lim;
+      else
+        i_lim = 0x7fff;
+    }
     let payload = new Buffer.allocUnsafe(p.len);
     payload.writeUInt8(command, 0);   // gripper command
+    payload.writeUInt8(0, 1);         // flag should be 0
+    payload.writeUInt16BE(i_lim, 2);  // max current
     let packetBuf = self.parser.encode(p.pro4Sync, id, p.flags, p.csrAddress, p.len, payload);
     // maintain state by updating at least once per second
     self.addToPublishQueue(packetBuf);
@@ -1581,8 +1587,9 @@ class Bridge extends EventEmitter
     let payload = new Buffer.allocUnsafe(p.lenBam);
     p.bamPayload.copy(payload);
 
-    if (value < 0) value = 0;
-    else if (value > 0xffff) value = 0xffff;
+    // value = 0 is servo off; 1 and 65535 are maximum either dir
+    if (value < 1) value = 1;
+    else if (value > 0xfffe) value = 0xfffe;
     // we only care about servo 1 at the moment
     logger.debug(`BRIDGE: Updating servo on sensor ID ${nodeId} to value ${value}`);
     payload.writeUInt16LE(value, 6);            // payload servo1
@@ -1803,8 +1810,9 @@ class Bridge extends EventEmitter
     let self = this;
     let nodeId = topic.split('/', 2)[1];
     let value = parseInt(message);
-    if (value === 0 || value === 2 || value === 3)
+    if (value === 0 || value === 2 || value === 3) {
       self.updateGripper(nodeId, value);
+    }
     else
       logger.debug('BRIDGE: Received invalid gripper control message ', value, ' for nodeId ', nodeId);
   }
