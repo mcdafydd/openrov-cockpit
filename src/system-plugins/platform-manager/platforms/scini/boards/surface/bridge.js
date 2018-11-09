@@ -1714,6 +1714,16 @@ class Bridge extends EventEmitter
                 self.updateKeller(parsedObj); // handles sending data to cockpit widget
             }
           }
+          // handles board44bam conversions
+          else if (parsedObj.device.cmd == 6) {
+            // change two temp sensors from voltage to celsius
+            if (parsedObj.device.hasOwnProperty('adc1')) {
+              parsedObj.device.adc1 = parsedObj.device.adc1 * 100 - 273.15;
+            }
+            if (parsedObj.device.hasOwnProperty('adc7')) {
+              parsedObj.device.adc7 = parsedObj.device.adc7 * 100 - 273.15;
+            }
+          }
         }
         else if (parsedObj.type == 'notfound')
         {
