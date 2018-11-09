@@ -133,7 +133,7 @@
                 exposure: new Listener( self.cockpitBus, 'plugin.elphel-config.exposure', false, function( cameraIp, exposure )
                 {
                     let newExposure;
-                    if ((exposure >= 10 && exposure <= 300) || exposure === 1 || exposure === -1) {
+                    if ((exposure >= 1 && exposure <= 300) || exposure === 1 || exposure === -1) {
                         // Send command to camera
                         if (cameraIp === 'pilot')
                             cameraIp = process.env['EXTERNAL_CAM_IP'];
@@ -182,7 +182,7 @@
                                 });
                             }
                             if (err) {
-                                deps.logger.debug('ELPHEL-CONFIG: Setting defaults failed with error:', err);
+                                deps.logger.debug(`ELPHEL-CONFIG: Getting full resolution snapshot on ${cameraIp}  failed with error: ${err}`);
                             }
                         });
                     }
@@ -437,7 +437,7 @@
                     'title': 'Exposure (ms)',
                     'description': 'Default Elphel camera sensor exposure value in milliseconds',
                     'default': 100,
-                    'minimum': 5,
+                    'minimum': 1,
                     'maximum': 500
                   },
                   'jpgQuality': {
