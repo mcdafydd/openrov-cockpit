@@ -258,7 +258,7 @@
                     {
                         'type': 'boolean',
                         'title': 'RecordOnServer',
-                        'default': false
+                        'default': true
                     }
                 },
 

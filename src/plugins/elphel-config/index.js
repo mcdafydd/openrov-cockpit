@@ -53,16 +53,12 @@
                     if (client.id.match('elphel.*') !== null) {
                         let cameraIp = client.connection.stream.remoteAddress;
                         deps.logger.debug(`ELPHEL-CONFIG: New camera joined at IP address ${cameraIp}`);
-                        request({timeout: 2000, uri:`http://${cameraIp}/setparameters_demo.php?AUTOEXP_ON=0&WB_EN=1&QUALITY=${self.quality}&EXPOS=${self.exposure}&BCH_HOR=${self.resolution}&BIN_VERT=${self.resolution}&DCM_HOR=${self.resolution}&DCM_VERT=${self.resolution}`}, function (err, response, body) {
+                        request({timeout: 2000, uri:`http://${cameraIp}/setparameters_demo.php?AUTOEXP_ON=0&WB_EN=1`}, function (err, response, body) {
                             if (response && response.statusCode == 200) {
                                 deps.logger.debug(`ELPHEL-CONFIG: Default settings set on camera ${cameraIp}`);
                                 // add IP to cameraMap with default properties on success
                                 if (!self.cameraMap.hasOwnProperty(cameraIp))
                                     self.cameraMap[cameraIp] = {};
-                                self.cameraMap[cameraIp].quality = self.quality;
-                                self.cameraMap[cameraIp].resolution = self.resolution;
-                                self.cameraMap[cameraIp].exposure = self.exposure;
-
                             }
                             if (err) {
                                 deps.logger.debug('ELPHEL-CONFIG: Setting defaults failed with error:', err);
