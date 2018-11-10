@@ -944,22 +944,25 @@ class Bridge extends EventEmitter
         // Order of parameter values:
         // thruster, vertical, starboard, aftvertical, aftstarboard
         // Ack command (ex: mtrmod1(100,100,-100,100,-100));
+        // main thruster
         if (parameters[0] < 0) {
-          self.motorControl.motors[0].reverse = true;
-          self.motorControl.motors[0].fwdMod = parameters[0] * 0.01;
-        }
-        else {
-          self.motorControl.motors[0].reverse = false;
-          self.motorControl.motors[0].fwdMod = parameters[0] * 0.01;
-        }
-        if (parameters[1] < 0) {
           self.motorControl.motors[4].reverse = true;
-          self.motorControl.motors[4].fwdMod = parameters[1] * 0.01;
+          self.motorControl.motors[4].fwdMod = parameters[0] * 0.01;
         }
         else {
           self.motorControl.motors[4].reverse = false;
-          self.motorControl.motors[4].fwdMod = parameters[1] * 0.01;
+          self.motorControl.motors[4].fwdMod = parameters[0] * 0.01;
         }
+        // forward vertical
+        if (parameters[1] < 0) {
+          self.motorControl.motors[2].reverse = true;
+          self.motorControl.motors[2].fwdMod = parameters[1] * 0.01;
+        }
+        else {
+          self.motorControl.motors[2].reverse = false;
+          self.motorControl.motors[2].fwdMod = parameters[1] * 0.01;
+        }
+        // forward horizontal
         if (parameters[2] < 0) {
           self.motorControl.motors[3].reverse = true;
           self.motorControl.motors[3].fwdMod = parameters[2] * 0.01;
@@ -968,14 +971,16 @@ class Bridge extends EventEmitter
           self.motorControl.motors[3].reverse = false;
           self.motorControl.motors[3].fwdMod = parameters[2] * 0.01;
         }
+        // aft vertical
         if (parameters[3] < 0) {
-          self.motorControl.motors[2].reverse = true;
-          self.motorControl.motors[2].fwdMod = parameters[3] * 0.01;
+          self.motorControl.motors[0].reverse = true;
+          self.motorControl.motors[0].fwdMod = parameters[3] * 0.01;
         }
         else {
-          self.motorControl.motors[2].reverse = false;
-          self.motorControl.motors[2].fwdMod = parameters[3] * 0.01;
+          self.motorControl.motors[0].reverse = false;
+          self.motorControl.motors[0].fwdMod = parameters[3] * 0.01;
         }
+        // aft horizontal
         if (parameters[4] < 0) {
           self.motorControl.motors[1].reverse = true;
           self.motorControl.motors[1].fwdMod = parameters[4] * 0.01;
@@ -993,30 +998,35 @@ class Bridge extends EventEmitter
       case 'mtrmod2':
       {
         // Ack command (ex: mtrmod2(200,200,-200,200,-200));
+        // main thruster
         if (parameters[0] < 0) {
-          self.motorControl.motors[0].revMod = parameters[0] * 0.01;
+          self.motorControl.motors[4].revMod = parameters[0] * 0.01;
         }
         else {
-          self.motorControl.motors[0].revMod = parameters[0] * 0.01;
+          self.motorControl.motors[4].revMod = parameters[0] * 0.01;
         }
+        // forward vertical
         if (parameters[1] < 0) {
-          self.motorControl.motors[4].revMod = parameters[1] * 0.01;
+          self.motorControl.motors[2].revMod = parameters[1] * 0.01;
         }
         else {
-          self.motorControl.motors[4].revMod = parameters[1] * 0.01;
+          self.motorControl.motors[2].revMod = parameters[1] * 0.01;
         }
+        // forward horizontal
         if (parameters[2] < 0) {
           self.motorControl.motors[3].revMod = parameters[2] * 0.01;
         }
         else {
           self.motorControl.motors[3].revMod = parameters[2] * 0.01;
         }
+        // aft vertical
         if (parameters[3] < 0) {
-          self.motorControl.motors[2].revMod = parameters[3] * 0.01;
+          self.motorControl.motors[0].revMod = parameters[3] * 0.01;
         }
         else {
-          self.motorControl.motors[2].revMod = parameters[3] * 0.01;
+          self.motorControl.motors[0].revMod = parameters[3] * 0.01;
         }
+        // aft horizontal
         if (parameters[4] < 0) {
           self.motorControl.motors[1].revMod = parameters[4] * 0.01;
         }

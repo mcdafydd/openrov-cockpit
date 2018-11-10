@@ -110,7 +110,7 @@
           "LEFT_STICK_X": { type: "axis",
                             action: 'sciniPilot.moveStrafe',
                             options: {
-                              inverted: false,
+                              inverted: true,
                               exponentialSticks: {
                                 enabled: false,
                                 rate: 1.0
@@ -120,7 +120,7 @@
           "RIGHT_STICK_Y": { type: "axis",
                           action: 'sciniPilot.movePitch',
                           options: {
-                            inverted: true,
+                            inverted: false,
                             exponentialSticks: {
                               enabled: false,
                               rate: 1.0

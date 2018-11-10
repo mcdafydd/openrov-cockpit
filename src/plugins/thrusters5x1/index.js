@@ -22,7 +22,7 @@ thrusters5x1.prototype.start = function start() {
   self.cockpit.on('plugin.thrusters5x1.motorTest', function (positions) {
     self.deps.globalEventLoop.emit('mcu.SendMotorTest', positions.thruster, positions.starboard, positions.vertical, positions.aftstarboard, positions.aftvertical);
   });
-  self.global.withHistory.on('settings-change.thrusters5x1', function (data) {  
+  self.global.withHistory.on('settings-change.thrusters5x1', function (data) {
     self.settings = data.thrusters5x1;
     self.SendMotorSettings();
   });
@@ -87,7 +87,7 @@ thrusters5x1.prototype.getSettingSchema = function getSettingSchema() {
           'default': 0
         },
         'thruster': {
-          'title:': 'Thruster Motor',
+          'title:': 'Main Thruster',
           'type': 'object',
           'properties': {
             'reversed': {
@@ -98,12 +98,12 @@ thrusters5x1.prototype.getSettingSchema = function getSettingSchema() {
             'forward-modifier': {
               'description' : 'Used to adjust the power sent to the motor so that thrusters provide equal thrust',
               'type': 'number',
-              'default': 1
+              'default': 1.5
             },
             'reverse-modifier': {
-              'description' : 'Used to adjust the power sent to the motor so that thrusters provide equal thrust',              
+              'description' : 'Used to adjust the power sent to the motor so that thrusters provide equal thrust',
               'type': 'number',
-              'default': 1
+              'default': 1.5
             }
           }
         },
@@ -117,19 +117,19 @@ thrusters5x1.prototype.getSettingSchema = function getSettingSchema() {
               'default': false
             },
             'forward-modifier': {
-              'description' : 'Used to adjust the power sent to the motor so that thrusters provide equal thrust',              
+              'description' : 'Used to adjust the power sent to the motor so that thrusters provide equal thrust',
               'type': 'number',
               'default': 1
             },
             'reverse-modifier': {
-              'description' : 'Used to adjust the power sent to the motor so that thrusters provide equal thrust',              
+              'description' : 'Used to adjust the power sent to the motor so that thrusters provide equal thrust',
               'type': 'number',
               'default': 1
             }
           }
         },
         'starboard': {
-          'title:': 'Fore Starboards Motor',
+          'title:': 'Fore Horizontal Motor',
           'type': 'object',
           'properties': {
             'reversed': {
@@ -138,12 +138,12 @@ thrusters5x1.prototype.getSettingSchema = function getSettingSchema() {
               'default': false
             },
             'forward-modifier': {
-              'description' : 'Used to adjust the power sent to the motor so that thrusters provide equal thrust',              
+              'description' : 'Used to adjust the power sent to the motor so that thrusters provide equal thrust',
               'type': 'number',
               'default': 1
             },
             'reverse-modifier': {
-              'description' : 'Used to adjust the power sent to the motor so that thrusters provide equal thrust',              
+              'description' : 'Used to adjust the power sent to the motor so that thrusters provide equal thrust',
               'type': 'number',
               'default': 1
             }
@@ -159,19 +159,19 @@ thrusters5x1.prototype.getSettingSchema = function getSettingSchema() {
               'default': false
             },
             'forward-modifier': {
-              'description' : 'Used to adjust the power sent to the motor so that thrusters provide equal thrust',              
+              'description' : 'Used to adjust the power sent to the motor so that thrusters provide equal thrust',
               'type': 'number',
               'default': 1
             },
             'reverse-modifier': {
-              'description' : 'Used to adjust the power sent to the motor so that thrusters provide equal thrust',              
+              'description' : 'Used to adjust the power sent to the motor so that thrusters provide equal thrust',
               'type': 'number',
               'default': 1
             }
           }
         },
         'aftstarboard': {
-          'title:': 'Aft Starboard Motor',
+          'title:': 'Aft Horizontal Motor',
           'type': 'object',
           'properties': {
             'reversed': {
@@ -180,12 +180,12 @@ thrusters5x1.prototype.getSettingSchema = function getSettingSchema() {
               'default': false
             },
             'forward-modifier': {
-              'description' : 'Used to adjust the power sent to the motor so that thrusters provide equal thrust',              
+              'description' : 'Used to adjust the power sent to the motor so that thrusters provide equal thrust',
               'type': 'number',
               'default': 1
             },
             'reverse-modifier': {
-              'description' : 'Used to adjust the power sent to the motor so that thrusters provide equal thrust',              
+              'description' : 'Used to adjust the power sent to the motor so that thrusters provide equal thrust',
               'type': 'number',
               'default': 1
             }

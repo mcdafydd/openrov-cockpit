@@ -287,35 +287,35 @@
           "d": { type: "button",
                 action: 'rovPilot.moveRight' },
           "e": { type: "button",
-                action: 'rovPilot.moveUp' },       
+                action: 'rovPilot.moveUp' },
           "c": { type: "button",
-                action: 'rovPilot.moveDown' }, 
+                action: 'rovPilot.moveDown' },
           "1": { type: "button",
-                action: 'rovPilot.powerLevel1' }, 
+                action: 'rovPilot.powerLevel1' },
           "2": { type: "button",
-                action: 'rovPilot.powerLevel2' }, 
+                action: 'rovPilot.powerLevel2' },
           "3": { type: "button",
-                action: 'rovPilot.powerLevel3' }, 
+                action: 'rovPilot.powerLevel3' },
           "4": { type: "button",
-                action: 'rovPilot.powerLevel4' }, 
+                action: 'rovPilot.powerLevel4' },
           "5": { type: "button",
-                action: 'rovPilot.powerLevel5' }, 
+                action: 'rovPilot.powerLevel5' },
           "-": { type: "button",
                 action: 'rovPilot.decrementPowerLevel' },
           "=": { type: "button",
-                action: 'rovPilot.incrementPowerLevel' }, 
+                action: 'rovPilot.incrementPowerLevel' },
         },
         gamepad:
         {
           "LEFT_STICK_Y": { type: "axis",
                             action: 'rovPilot.moveThrottle',
                             options: {
-                              inverted: true,
+                              inverted: false,
                               exponentialSticks: {
                                 enabled: false,
                                 rate: 1.0
                               }
-                            } 
+                            }
                           },
           "RIGHT_STICK_X": { type: "axis",
                             action: 'rovPilot.moveYaw',
