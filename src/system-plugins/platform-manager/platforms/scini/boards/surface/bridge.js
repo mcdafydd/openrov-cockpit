@@ -254,7 +254,7 @@ class Bridge extends EventEmitter
     this.rovLights = {
       time:             0,
       timeDelta_ms:     0,
-      updateInterval:   700,    // loop interval in ms
+      updateInterval:   450,    // loop interval in ms
       devices:           {
         61:             {
           location:     'rov',
@@ -400,7 +400,7 @@ class Bridge extends EventEmitter
   {
     let self = this;
 
-    logger.debug('BRIDGE: Starting connect() to MQTT broker');
+    logger.info('BRIDGE: Starting connect() to MQTT broker');
 
     // Add SCINI device control interval functions
     self.sensorInterval = setInterval( function() { return self.requestSensors(); },          self.sensors.updateInterval );
@@ -431,8 +431,8 @@ class Bridge extends EventEmitter
 
     self.client.on('connect', () => {
       self.mqttConnected = true;
-      logger.debug('BRIDGE: MQTT broker connection established!');
-      logger.debug('BRIDGE: Creating surface subscriptions.');
+      logger.info('BRIDGE: MQTT broker connection established!');
+      logger.info('BRIDGE: Creating surface subscriptions.');
       self.client.subscribe('status/+'); // receive all status topic messages
       self.client.subscribe('thrusters/+'); // receive all motor control responses
       self.client.subscribe('sensors/+'); // receive all sensor telemetry
@@ -446,18 +446,17 @@ class Bridge extends EventEmitter
 
     self.client.on('reconnect', () => {
       self.mqttConnected = true;
-      logger.debug('BRIDGE: MQTT broker re-connected!');
+      logger.info('BRIDGE: MQTT broker re-connected!');
     });
 
     self.client.on('offline', () => {
       self.mqttConnected = false;
-      logger.debug('BRIDGE: MQTT broker connection offline!');
+      logger.warn('BRIDGE: MQTT broker connection offline!');
     });
 
     self.client.on('message', (topic, message) => {
       // message is a Buffer object, send to decoder
-      logger.debug('BRIDGE: Received MQTT on topic ' + topic);
-      logger.warn('BRIDGE: Raw MQTT message = ' + message.toString('hex'));
+      logger.warn('BRIDGE: Received MQTT topic = ' + topic + '; raw = ' + message.toString('hex'));
 
       if (topic.match('fromScini/.*') !== null) {
         self.handleRovMqtt(topic, message);
@@ -472,18 +471,18 @@ class Bridge extends EventEmitter
         self.handleGrippersMqtt(topic, message);
       }
       else {
-        logger.info('BRIDGE: No handler for message');
+        logger.warn('BRIDGE: No handler for MQTT message on topic ' + topic);
       }
     });
 
     self.client.on('error', (err) => {
-      logger.debug('BRIDGE: MQTT error: ', err);
+      logger.error('BRIDGE: MQTT error: ', err);
     });
 
     self.client.on('close', () => {
       // connection state is also set to false in class close() method
       self.mqttConnected = false;
-      logger.debug('BRIDGE: MQTT broker connection closed!');
+      logger.warn('BRIDGE: MQTT broker connection closed!');
     });
 
     self.globalBus.on('plugin.mqttBroker.clientConnected', (client) => {
@@ -498,7 +497,7 @@ class Bridge extends EventEmitter
       }
       self.mqttConfig[clientIp].id = clientId;
       self.mqttConfigId[clientId] = clientIp;
-      logger.debug('BRIDGE: Received MQTT clientConnected() from ' + clientId);
+      logger.info('BRIDGE: Received MQTT clientConnected() from ' + clientId);
       // create new message queue for each ROV MQTT gateway
       if (clientId.match('elphel.*') !== null
           && self.mqttConfig[clientIp].receiveMqtt === true) {
@@ -1288,6 +1287,7 @@ class Bridge extends EventEmitter
     if( self.mqttConnected )
     {
       self.client.publish('toScini/' + clientId, packetBuf);
+      logger.debug('BRIDGE: sendToMqtt() published for client ' + clientId + ' message = ' + packetBuf.toString('hex'));
       if( self.emitRawSerial )
       {
         self.emit('serial-sent', packetBuf );
