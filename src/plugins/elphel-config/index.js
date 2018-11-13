@@ -61,7 +61,7 @@
                                     self.cameraMap[cameraIp] = {};
                             }
                             if (err) {
-                                deps.logger.debug('ELPHEL-CONFIG: Setting defaults failed with error:', err);
+                                deps.logger.error('ELPHEL-CONFIG: Setting defaults failed with error:', err);
                             }
                         });
                     }
@@ -95,7 +95,7 @@
                                     self.cameraMap[cameraIp].resolution = resolution;
                             }
                             if (err) {
-                                deps.logger.debug(`ELPHEL-CONFIG: Setting resolution on camera ${cameraIp} failed with error: ${err}`);
+                                deps.logger.error(`ELPHEL-CONFIG: Setting resolution on camera ${cameraIp} failed with error: ${err}`);
                             }
                         });
                     }
@@ -117,7 +117,7 @@
                                     self.cameraMap[cameraIp].quality = quality;
                             }
                             if (err) {
-                                deps.logger.debug(`ELPHEL-CONFIG: Setting JPEG quality on camera ${cameraIp} failed with error: ${err}`);
+                                deps.logger.error(`ELPHEL-CONFIG: Setting JPEG quality on camera ${cameraIp} failed with error: ${err}`);
                             }
                         });
                     }
@@ -148,12 +148,12 @@
                                     self.cameraMap[cameraIp].exposure = newExposure;
                             }
                             if (err) {
-                                deps.logger.debug(`ELPHEL-CONFIG: Setting exposure on camera ${cameraIp} failed with error: ${err}`);
+                                deps.logger.error(`ELPHEL-CONFIG: Setting exposure on camera ${cameraIp} failed with error: ${err}`);
                             }
                         });
                     }
                     else {
-                        deps.logger.debug(`ELPHEL-CONFIG: Invalid exposure value ${exposure}ms for camera ${cameraIp} - ignoring`);
+                        deps.logger.error(`ELPHEL-CONFIG: Invalid exposure value ${exposure}ms for camera ${cameraIp} - ignoring`);
                     }
                 }),
 
@@ -170,7 +170,7 @@
                         id = self.cameraMap[cameraIp].id;
                         // request() will follow redirects by default
                         let url = `http://${cameraIp}/snapfull.php`;
-                        request({timeout: 2000, uri: url}, {encoding: 'binary'}, function(err, response, body) {
+                        request({timeout: 5000, uri: url, encoding: null}, function(err, response, body) {
                             if (response && response.statusCode == 200) {
                                 deps.logger.debug(`ELPHEL-CONFIG: Snapped full resolution image from camera ${cameraIp}`);
                                 fs.writeFile(`/opt/openrov/images/${ts}/${id}/${filename.toISOString()}_full.jpg`, body, 'binary', function (err) {
@@ -178,7 +178,7 @@
                                 });
                             }
                             if (err) {
-                                deps.logger.debug(`ELPHEL-CONFIG: Getting full resolution snapshot on ${cameraIp}  failed with error: ${err}`);
+                                deps.logger.error(`ELPHEL-CONFIG: Getting full resolution snapshot on ${cameraIp}  failed with error: ${err}`);
                             }
                         });
                     }
@@ -196,7 +196,7 @@
                                 deps.logger.debug(`ELPHEL-CONFIG: Set color ${colorText} on camera ${cameraIp}`);
                             }
                             if (err) {
-                                deps.logger.debug(`ELPHEL-CONFIG: Setting color on camera ${cameraIp} failed with error: ${err}`);
+                                deps.logger.error(`ELPHEL-CONFIG: Setting color on camera ${cameraIp} failed with error: ${err}`);
                             }
                         });
                     }
@@ -208,14 +208,14 @@
                 temp: new Listener( self.cockpitBus, 'plugin.elphel-config.temp', false, function( cameraIp )
                 {
                     let onBoardTemp = 'i2c.php?width=8&bus=1&adr=0x4800';
-                    let port = 'unknown';
+                    let subProp = 'unknown';
                     // Send command to camera
                     if (cameraIp === 'pilot')
-                        cameraIp = process.env['EXTERNAL_CAM_IP'];
+                      cameraIp = process.env['EXTERNAL_CAM_IP'];
                     if (self.cameraMap.hasOwnProperty(cameraIp)) {
-                        port = self.cameraMap[cameraIp].port;
+                      subProp = cameraIp.split('.')[3];
                     }
-                    let prop = `camTemp.${port}`;
+                    let prop = `camera.${subProp}`;
                     let statusobj = {};
                     request({timeout: 2000, uri:`http://${cameraIp}/${onBoardTemp}`}, function (err, response, body) {
                         if (response && response.statusCode == 200) {
@@ -229,12 +229,62 @@
                                 else if (err) {
                                     statusobj[prop] = -1;
                                     self.globalBus.emit('mcu.status', statusobj);
-                                    deps.logger.debug(`ELPHEL-CONFIG: Onboard temperature request parsing error: ${err}`);
+                                    deps.logger.error(`ELPHEL-CONFIG: Onboard temperature response XML parsing error: ${err}`);
                                 }
                             });
                         }
                         if (err) {
-                            deps.logger.debug(`ELPHEL-CONFIG: Getting onBoard temperature on camera ${cameraIp} with error: ${err}`);
+                            deps.logger.error(`ELPHEL-CONFIG: Getting onBoard temperature on camera ${cameraIp} failed with error: ${err}`);
+                        }
+                    });
+                }),
+
+                getCamSettings: new Listener( self.cockpitBus, 'plugin.elphel-config.getCamSettings', false, function( cameraIp )
+                {
+                    let settingsPath = 'parsedit.php?immediate&COLOR&EXPOS&QUALITY&DCM_HOR&FLIPV&FLIPH&AUTOEXP_ON&WB_EN';
+                    let subProp = 'unknown';
+                    // Send command to camera
+                    if (cameraIp === 'pilot')
+                      cameraIp = process.env['EXTERNAL_CAM_IP'];
+                    if (self.cameraMap.hasOwnProperty(cameraIp)) {
+                      subProp = cameraIp.split('.')[3];
+                    }
+                    let prop = `camera.${subProp}`;
+                    let statusobj = {};
+                    request({timeout: 2000, uri:`http://${cameraIp}/${settingsPath}`}, function (err, response, body) {
+                        if (response && response.statusCode == 200) {
+                            parseString(body, function (err, result) {
+                                if (result) {
+                                  if (result.hasOwnProperty('parameters')) {
+                                    if (result.parameters.hasOwnProperty('COLOR'))
+                                      statusobj[`${prop}.color`] = parseInt(result.parameters.COLOR);
+                                    if (result.parameters.hasOwnProperty('EXPOS'))
+                                      statusobj[`${prop}.exposure`] = parseInt(result.parameters.EXPOS);
+                                    if (result.parameters.hasOwnProperty('QUALITY'))
+                                      statusobj[`${prop}.quality`] = parseInt(result.parameters.QUALITY);
+                                    if (result.parameters.hasOwnProperty('DCM_HOR'))
+                                      statusobj[`${prop}.resolution`] = parseInt(result.parameters.DCM_HOR);
+                                    if (result.parameters.hasOwnProperty('FLIPV'))
+                                      statusobj[`${prop}.flipv`] = parseInt(result.parameters.FLIPV);
+                                    if (result.parameters.hasOwnProperty('FLIPH'))
+                                      statusobj[`${prop}.fliph`] = parseInt(result.parameters.FLIPH);
+                                    if (result.parameters.hasOwnProperty('AUTOEXP_ON'))
+                                      statusobj[`${prop}.autoexposure`] = parseInt(result.parameters.AUTOEXP_ON);
+                                    if (result.parameters.hasOwnProperty('WB_EN'))
+                                      statusobj[`${prop}.whitebalance`] = parseInt(result.parameters.WB_EN);
+                                  }
+                                    deps.logger.debug(`ELPHEL-CONFIG: getCamSettings successful on ${cameraIp} settings`);
+                                    self.globalBus.emit('mcu.status', statusobj);
+                                }
+                                else if (err) {
+                                    statusobj[prop] = -1;
+                                    self.globalBus.emit('mcu.status', statusobj);
+                                    deps.logger.error(`ELPHEL-CONFIG: getCamSettings response XML parsing error: ${err}`);
+                                }
+                            });
+                        }
+                        if (err) {
+                            deps.logger.error(`ELPHEL-CONFIG: getCamSettings on camera ${cameraIp} failed with error: ${err}`);
                         }
                     });
                 }),
@@ -275,29 +325,29 @@
 
             this.client.on('connect', () => {
                 this.mqttConnected = true;
-                deps.logger.debug('ELPHEL-CONFIG: MQTT broker connection established!');
+                deps.logger.info('ELPHEL-CONFIG: MQTT broker connection established!');
                 this.client.subscribe('toCamera/#'); // receive all camera control requests
                 this.client.subscribe('video/restart');
             });
 
             this.client.on('reconnect', () => {
                 this.mqttConnected = true;
-                deps.logger.debug('ELPHEL-CONFIG: MQTT broker re-connected!');
+                deps.logger.warn('ELPHEL-CONFIG: MQTT broker re-connected!');
             });
 
             this.client.on('offline', () => {
                 this.mqttConnected = false;
-                deps.logger.debug('ELPHEL-CONFIG: MQTT broker connection offline!');
+                deps.logger.warn('ELPHEL-CONFIG: MQTT broker connection offline!');
             });
 
             this.client.on('close', () => {
                 // connection state is also set to false in class close() method
                 this.mqttConnected = false;
-                deps.logger.debug('ELPHEL-CONFIG: MQTT broker connection closed!');
+                deps.logger.warn('ELPHEL-CONFIG: MQTT broker connection closed!');
             });
 
             this.client.on('error', (err) => {
-                deps.logger.debug('ELPHEL-CONFIG: MQTT error: ', err);
+                deps.logger.error('ELPHEL-CONFIG: MQTT error: ', err);
             });
 
             this.client.on('message', (topic, message) => {
@@ -381,6 +431,16 @@
           }
         }
 
+        requestCamSettings()
+        {
+          let self = this;
+
+          for (let prop in self.cameraMap) {
+            if (prop.match('820[0-9]') !== null)
+              self.cockpitBus.emit('plugin.elphel-config.getCamSettings', self.cameraMap[prop].ipAddress);
+          }
+        }
+
         // This is automatically called when cockpit loads all of the plugins, and when a plugin is enabled
         start()
         {
@@ -395,8 +455,10 @@
           this.listeners.snapFull.enable();
           this.listeners.sayHello.enable();
           this.listeners.temp.enable();
+          this.listeners.getCamSettings.enable();
 
           //this.camTempInterval = setInterval(() => { return this.requestCamTemp(); }, 5000);
+          this.camSettingsInterval = setInterval(() => { return this.requestCamSettings(); }, 5000);
         }
 
         // This is called when the plugin is disabled
@@ -413,8 +475,10 @@
           this.listeners.snapFull.disable();
           this.listeners.sayHello.disable();
           this.listeners.temp.disable();
+          this.listeners.getCamSettings.disable();
 
           //clearInterval(this.camTempInterval);
+          clearInterval(this.camSettingsInterval);
         }
 
         // This is used to define user settings for the plugin. We populated some elphel-config properties below.

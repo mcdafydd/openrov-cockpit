@@ -790,7 +790,6 @@ class Pro4
         chksum ^= buf[i];
       }
       buf.writeUInt8(chksum, this.constants.PROTOCOL_PRO4_HEADER_SIZE);
-      logger.debug('PRO4: My crc8 header = ' + chksum.toString(16));;
     }
 
     if (payload != 0)
@@ -809,7 +808,6 @@ class Pro4
           }
         }
         buf.writeUInt8(chksum, skip);
-        logger.debug('PRO4: My crc8 total = ' + chksum.toString(16));
       }
     }
     else
@@ -817,7 +815,7 @@ class Pro4
       buf = buf.slice(0,7); // read-only zero byte PRO4 request, no need for final checksum
     }
 
-    logger.warn('PRO4: Debug PRO4 request = ' + buf.toString('hex'));
+    logger.debug('PRO4: Encoded PRO4 request = ' + buf.toString('hex'));
     return buf;
   };
 
