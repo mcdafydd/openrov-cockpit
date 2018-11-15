@@ -259,7 +259,7 @@
                                     if (result.parameters.hasOwnProperty('COLOR'))
                                       statusobj[`${prop}.color`] = parseInt(result.parameters.COLOR);
                                     if (result.parameters.hasOwnProperty('EXPOS'))
-                                      statusobj[`${prop}.exposure`] = parseInt(result.parameters.EXPOS);
+                                      statusobj[`${prop}.exposure`] = parseInt(result.parameters.EXPOS)/1000; // ms
                                     if (result.parameters.hasOwnProperty('QUALITY'))
                                       statusobj[`${prop}.quality`] = parseInt(result.parameters.QUALITY);
                                     if (result.parameters.hasOwnProperty('DCM_HOR'))
