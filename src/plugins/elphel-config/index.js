@@ -88,7 +88,7 @@
                         // Send command to camera
                         if (cameraIp === 'pilot')
                             cameraIp = process.env['EXTERNAL_CAM_IP'];
-                        request({timeout: 2000, uri:`http://${cameraIp}/setparameters_demo.php?BCH_HOR=${resolution}&BIN_VERT=${resolution}&DCM_HOR=${resolution}&DCM_VERT=${resolution}`}, function (err, response, body) {
+                        request({timeout: 2000, uri:`http://${cameraIp}/setparameters_demo.php?BIN_HOR=${resolution}&BIN_VERT=${resolution}&DCM_HOR=${resolution}&DCM_VERT=${resolution}`}, function (err, response, body) {
                             if (response && response.statusCode == 200) {
                                 deps.logger.debug(`ELPHEL-CONFIG: Set resolution 1/${resolution} on camera ${cameraIp}`);
                                 if (self.cameraMap.hasOwnProperty(cameraIp))
