@@ -34,6 +34,8 @@ function telemetry(name, deps) {
   const client = mqtt.connect(mqttUri, {
     protocolVersion: 4,
     resubscribe: true,
+    clientId: 'telemetry',
+    keepalive: 15,
     will: {
         topic: 'status/openrov',
         payload: 'TELEMETRY: OpenROV MQTT client disconnected!',
