@@ -88,7 +88,7 @@
                         // Send command to camera
                         if (cameraIp === 'pilot')
                             cameraIp = process.env['EXTERNAL_CAM_IP'];
-                        request({timeout: 2000, uri:`http://${cameraIp}/setparameters_demo.php?BCH_HOR=${resolution}&BIN_VERT=${resolution}&DCM_HOR=${resolution}&DCM_VERT=${resolution}`}, function (err, response, body) {
+                        request({timeout: 2000, uri:`http://${cameraIp}/setparameters_demo.php?BIN_HOR=${resolution}&BIN_VERT=${resolution}&DCM_HOR=${resolution}&DCM_VERT=${resolution}`}, function (err, response, body) {
                             if (response && response.statusCode == 200) {
                                 deps.logger.debug(`ELPHEL-CONFIG: Set resolution 1/${resolution} on camera ${cameraIp}`);
                                 if (self.cameraMap.hasOwnProperty(cameraIp))
@@ -315,6 +315,8 @@
             this.client = mqtt.connect(this.mqttUri, {
                 protocolVersion: 4,
                 resubscribe: true,
+                clientId: 'camera-config',
+                keepalive: 15,
                 will: {
                     topic: 'status/openrov',
                     payload: 'ELPHEL-CONFIG: OpenROV MQTT client disconnected!',
@@ -326,6 +328,7 @@
             this.client.on('connect', () => {
                 this.mqttConnected = true;
                 deps.logger.info('ELPHEL-CONFIG: MQTT broker connection established!');
+                this.client.subscribe('$SYS/+/new/clients');
                 this.client.subscribe('toCamera/#'); // receive all camera control requests
                 this.client.subscribe('video/restart');
             });
@@ -456,9 +459,6 @@
           this.listeners.sayHello.enable();
           this.listeners.temp.enable();
           this.listeners.getCamSettings.enable();
-
-          //this.camTempInterval = setInterval(() => { return this.requestCamTemp(); }, 5000);
-          this.camSettingsInterval = setInterval(() => { return this.requestCamSettings(); }, 5000);
         }
 
         // This is called when the plugin is disabled
@@ -476,9 +476,6 @@
           this.listeners.sayHello.disable();
           this.listeners.temp.disable();
           this.listeners.getCamSettings.disable();
-
-          //clearInterval(this.camTempInterval);
-          clearInterval(this.camSettingsInterval);
         }
 
         // This is used to define user settings for the plugin. We populated some elphel-config properties below.
