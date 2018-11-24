@@ -145,22 +145,27 @@ class Bridge extends EventEmitter
       },
       devices:           {
         51:             {
+          location:     'clump',
           center:       0x8000,
           speed:        8192
         },
         52:             {
+          location:     'rov',
           center:       0x8000,
           speed:        8192
         },
         57:             {
+          location:     'rov',
           center:       0x8000,
           speed:        8192
         },
         58:             {
+          location:     'rov',
           center:       0x8000,
           speed:        8192
         },
         67:             {
+          location:     'clump',
           center:       0x8000,
           speed:        8192
         }
@@ -256,7 +261,7 @@ class Bridge extends EventEmitter
       timeDelta_ms:     0,
       updateInterval:   450,    // loop interval in ms
       devices:           {
-        61:             {
+        61:             { // 61 not used
           location:     'rov',
           power:        0.0
         },
@@ -269,7 +274,7 @@ class Bridge extends EventEmitter
           power:        0.0
         },
         65:             {
-          location:     'clump',
+          location:     'rov',
           power:        0.0
         },
         66:             {
@@ -297,16 +302,19 @@ class Bridge extends EventEmitter
       devices:             {
         21:             {
           name:         "Gripper 1",
+          location:     "rov",
           state:        0,
           i_lim:        0x7fff
         },
         23:             {
           name:         "Gripper 2 - water sampler",
+          location:     "rov",
           state:        0,
           i_lim:        0x7fff
         },
         24:             {
           name:         "Gripper 3 - trim",
+          location:     "rov",
           state:        0,
           i_lim:        0x7fff
         },
@@ -339,6 +347,7 @@ class Bridge extends EventEmitter
       motors:           [
         {
           name:         "aft vertical",
+          location:     "rov",
           nodeId:       12,     // PRO4 packet ID
           motorId:      0,      // device protocol ID, position in PRO4 payload
           value:        0,      // thrust value (-1 to +1)
@@ -348,6 +357,7 @@ class Bridge extends EventEmitter
         },
         {
           name:         "aft horizontal",
+          location:     "rov",
           nodeId:       13,     // PRO4 packet IDar
           motorId:      1,      // device protocol ID, position in PRO4 payload
           value:        0,      // thrust value (-1 to +1)
@@ -357,6 +367,7 @@ class Bridge extends EventEmitter
         },
         {
           name:         "fore vertical",
+          location:     "rov",
           nodeId:       14,     // PRO4 packet ID
           motorId:      2,      // device protocol ID, position in PRO4 payload
           value:        0,      // thrust value (-1 to +1)
@@ -366,6 +377,7 @@ class Bridge extends EventEmitter
         },
         {
           name:         "fore horizontal",
+          location:     "rov",
           nodeId:       15,     // PRO4 packet ID
           motorId:      3,      // device protocol ID, position in PRO4 payload
           value:        0,      // thrust value (-1 to +1)
@@ -375,6 +387,7 @@ class Bridge extends EventEmitter
         },
         {
           name:         "thruster",
+          location:     "rov",
           nodeId:       16,     // PRO4 packet ID
           motorId:      4,      // device protocol ID, position in PRO4 payload
           value:        0,      // thrust value (-1 to +1)
@@ -409,7 +422,7 @@ class Bridge extends EventEmitter
     self.lightsInterval = setInterval( function() { return self.updateLights(); },       self.rovLights.updateInterval );
     self.motorInterval = setInterval( function() { return self.updateMotors(); },     self.motorControl.updateInterval );
     self.rotateMotorInterval = setInterval( function() { return self.rotateMotor(); },     self.motorControl.rotateInterval );
-    self.gripperInterval = setInterval( function() { return self.requestGrippers(); },     self.gripperControl.updateInterval );
+
     // asynchronously flush every 10 seconds to keep the buffer empty
     // in periods of low activity
     self.dataLoggerInterval = setInterval(function () { dataLogger.flush(); }, 10000).unref();
@@ -433,6 +446,7 @@ class Bridge extends EventEmitter
       self.mqttConnected = true;
       logger.info('BRIDGE: MQTT broker connection established!');
       logger.info('BRIDGE: Creating surface subscriptions.');
+      self.client.subscribe('$SYS/+/new/clients');
       self.client.subscribe('status/+'); // receive all status topic messages
       self.client.subscribe('thrusters/+'); // receive all motor control responses
       self.client.subscribe('sensors/+'); // receive all sensor telemetry
@@ -495,6 +509,9 @@ class Bridge extends EventEmitter
       if (!self.mqttConfig[clientIp].hasOwnProperty('receiveMqtt')) {
         self.mqttConfig[clientIp].receiveMqtt = false;
       }
+      if (!self.mqttConfig[clientIp].hasOwnProperty('location')) {
+        self.mqttConfig[clientIp].location = 'unspecified';
+      }
       self.mqttConfig[clientIp].id = clientId;
       self.mqttConfigId[clientId] = clientIp;
       logger.info('BRIDGE: Received MQTT clientConnected() from ' + clientId);
@@ -503,38 +520,32 @@ class Bridge extends EventEmitter
           && self.mqttConfig[clientIp].receiveMqtt === true) {
         // create new state machine, parse buffer, and job queue
         // concurrency = 1 (one message in flight at a time)
-        // max wait time for response = 20ms
+        // max wait time for response = 60ms
         // autostart = always running if jobs are in queue
         // results = store
         self.clients[clientId] = {};
         self.clients[clientId].bufIdx = 0; // points to end of received data in parseBuffer
         self.clients[clientId].parseIdx = 0; // points to current parser index
         self.clients[clientId].parseBuffer = new Buffer.alloc(1024);
-        self.results[clientId] = new q({
-                                      concurrency: 1,
-                                      timeout: 25,
-                                      autostart: true,
-                                      results: self.results[clientId]
-                                    });
+        self.results[clientId] = [];
         self.jobs[clientId] = new q({
                                       concurrency: 1,
-                                      timeout: 25,
+                                      timeout: 60,
                                       autostart: true,
                                       results: self.results[clientId]
                                     });
-        self.jobs[clientId].cb = function() {
-          // do nothing
-          return true;
-        }
+        self.jobs[clientId].on('success', function (result, job) {
+          logger.debug(`BRIDGE: sendToMqtt() from clientId ${clientId} produced result ${result}`);
+        });
         self.jobs[clientId].on('error', function (err, job) {
-          logger.error('BRIDGE: sendToMqtt() from clientId ', clientId, 'produced error: ', err);
+          logger.error(`BRIDGE: sendToMqtt() from clientId ${clientId} produced error ${err}`);
         });
         self.jobs[clientId].on('timeout', function (next, job) {
-          logger.debug('BRIDGE: sendToMqtt() from clientId ', clientId, 'timed out; resetting parser state machine');
+          logger.debug(`BRIDGE: sendToMqtt() from clientId ${clientId} timed out; resetting parser state machine`);
           next();
         });
         self.jobs[clientId].on('end', function () {
-          logger.debug('BRIDGE: all jobs done for clientId ', clientId);
+          logger.debug(`BRIDGE: all jobs done for clientId ${clientId}`);
         });
       }
     });
@@ -572,7 +583,6 @@ class Bridge extends EventEmitter
     clearInterval( self.motorInterval );
     clearInterval( self.rotateInterval );
     clearInterval( self.dataLoggerInterval );
-    clearInterval( self.gripperInterval);
 
     self.client.end(false, () => {
       logger.debug('BRIDGE: MQTT self.client.end() returned.');
@@ -1263,39 +1273,40 @@ class Bridge extends EventEmitter
     self.emitStatus('cmd:' + command);
   }
 
-  addToPublishQueue ( packetBuf )
+  addToPublishQueue(packetBuf, queueLoc)
   {
     let self = this;
+    if (queueLoc !== 'rov' && queueLoc !== 'clump') {
+      queueLoc = 'rov'; // default to vehicle queue
+    }
     // keep it simple - add packetBuf to each client queue (queues only get created on one gateway per serial bus)
-    for ( let clientId in self.jobs ) {
-      let cb = self.jobs[clientId].cb;
-      self.jobs[clientId].push(function (cb) { return self.sendToMqtt(clientId, packetBuf); });
+    for (let clientId in self.jobs) {
+      let job = function(cb) {
+        return self.sendToMqtt(clientId, packetBuf, cb);
+      }
+      self.jobs[clientId].push(job);
     }
   }
 
-  addToParseQueue ( clientId, packetBuf )
-  {
-    let self = this;
-    let cb = self.results[clientId].cb;
-    self.results[clientId].push(function (cb) { return self.parser.parse(packetBuf); });
-  }
-
-  sendToMqtt ( clientId, packetBuf )
+  sendToMqtt(clientId, packetBuf, cb)
   {
     let self = this;
     self.parser.reset(); // reset state machine
-    if( self.mqttConnected )
+    if(self.mqttConnected)
     {
       self.client.publish('toScini/' + clientId, packetBuf);
+      // defer callback for mqtt message receipt
+      self.results[clientId].push(cb);
       logger.debug('BRIDGE: sendToMqtt() published for client ' + clientId + ' message = ' + packetBuf.toString('hex'));
-      if( self.emitRawSerial )
+      if(self.emitRawSerial)
       {
-        self.emit('serial-sent', packetBuf );
+        self.emit('serial-sent', packetBuf);
       }
     }
     else
     {
-      logger.debug('BRIDGE: DID NOT SEND TO ROV - client ' + clientId + ' not connected');
+      logger.debug('BRIDGE: DID NOT SEND TO ROV - client ' + clientId + ' not connected. Advancing queue.');
+      cb();
     }
   }
 
@@ -1582,7 +1593,7 @@ class Bridge extends EventEmitter
           payload.write('00:#030\r\n',1);
         }
         let packetBuf = self.parser.encode(p.pro4Sync, parseInt(nodeId), p.flags, p.csrAddress, len, payload);
-        self.addToPublishQueue(packetBuf);
+        self.addToPublishQueue(packetBuf, self.boards44.devices[nodeId].location);
         logger.debug(`BRIDGE: Queued Boards44 command ${cmd} for nodeId ${nodeId}, buf = ${packetBuf.toString('hex')}`);
       }
     }
@@ -1694,9 +1705,12 @@ class Bridge extends EventEmitter
       let parsedObj = self.parser.parse(message);
       if (parsedObj.status == pro4.constants.STATUS_SUCCESS)
       {
+        let cb = self.results[clientId].pop();
+        if (cb instanceof Function) {
+          cb(); // advance queue
+        }
         let status = '';
         logger.debug('BRIDGE: Successfully parsed ROV PRO4 packet, advancing job queue; message = ', message.toString('hex'));
-        self.jobs[clientId].cb(); // advance queue
 
         if (parsedObj.type == 'pilot')
         {
@@ -1760,15 +1774,21 @@ class Bridge extends EventEmitter
       }
       else if (parsedObj.status == pro4.constants.STATUS_MOREDATA)
       {
+        // XXX - how long do we want to wait for queue timeout advance
+        self.results[clientId].pop(); // allow queue to timeout
         logger.debug('BRIDGE: Waiting for more data; message = ', message.toString('hex'));
       }
       else if (parsedObj.status == pro4.constants.STATUS_ERROR)
       {
+        let cb = self.results[clientId].pop();
+        if (cb instanceof Function) {
+          cb(); // advance queue
+        }
         logger.warn('BRIDGE: Error in PRO4 message parser; message = ', message.toString('hex'));
-        self.jobs[clientId].cb(); // advance queue
       }
       else // invalid status
       {
+        self.results[clientId].pop(); // allow queue to timeout
         logger.warn('BRIDGE: Invalid PRO4 parser status = ', parsedObj.status, ' ; message = ', message.toString('hex'));
       }
     }
