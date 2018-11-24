@@ -434,6 +434,7 @@ class Bridge extends EventEmitter
       protocolVersion: 4,
       resubscribe: true,
       clientId: 'bridge',
+      keepalive: 15,
       will: {
         topic: 'status/openrov',
         payload: 'OpenROV MQTT client disconnected!',
