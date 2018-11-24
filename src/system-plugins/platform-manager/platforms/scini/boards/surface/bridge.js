@@ -1281,18 +1281,24 @@ class Bridge extends EventEmitter
     self.emitStatus('cmd:' + command);
   }
 
-  addToPublishQueue(packetBuf, queueLoc)
+  addToPublishQueue(packetBuf, deviceLoc)
   {
     let self = this;
-    if (queueLoc !== 'rov' && queueLoc !== 'clump') {
-      queueLoc = 'rov'; // default to vehicle queue
+
+    if (deviceLoc !== 'rov' && deviceLoc !== 'clump') {
+      deviceLoc = 'rov'; // default to vehicle queue
     }
-    // keep it simple - add packetBuf to each client queue (queues only get created on one gateway per serial bus)
+    // only submit job to queue connected to device location
     for (let clientId in self.jobs) {
-      let job = function(cb) {
-        return self.sendToMqtt(clientId, packetBuf, cb);
+      if (self.mqttConfigId.hasOwnProperty(clientId)) {
+        let clientIp = self.mqttConfigId[clientId];
+        if (self.mqttConfig[clientIp].location === deviceLoc) {
+          let job = function(cb) {
+            return self.sendToMqtt(clientId, packetBuf, cb);
+          }
+          self.jobs[clientId].push(job);
+        }
       }
-      self.jobs[clientId].push(job);
     }
   }
 
@@ -1434,7 +1440,7 @@ class Bridge extends EventEmitter
           let packetBuf = self.parser.encode(p.sync, id, p.flags, p.csrAddress, p.len, payload);
           // maintain light state by updating at least once per second
           // TODO: do I need to await/promise packetBuf?
-          self.addToPublishQueue(packetBuf);
+          self.addToPublishQueue(packetBuf, self.rovLights.devices[nodeId].location);
         })();
       }
     }
@@ -1471,7 +1477,7 @@ class Bridge extends EventEmitter
       // first address in array is a multicast group
       packetBuf = self.parser.encode(p.pro4Sync, p.pro4Addresses[0], p.flags, p.csrAddress, p.len, payload);
       // maintain state by updating at least once per second
-      self.addToPublishQueue(packetBuf);
+      self.addToPublishQueue(packetBuf, 'rov');
     }
     else {
       // first address in array is not multicast
@@ -1482,7 +1488,7 @@ class Bridge extends EventEmitter
           // Packet len = Header + 4-byte CRC + payload + 4-byte CRC = 27
           packetBuf = self.parser.encode(p.pro4Sync, m[j].nodeId, p.flags, p.csrAddress, p.len, payload);
           // maintain light state by updating at least once per second
-          self.addToPublishQueue(packetBuf);
+          self.addToPublishQueue(packetBuf, 'rov');
         })();
       }
     }
@@ -1509,26 +1515,6 @@ class Bridge extends EventEmitter
       self.motorControl.responderIdx++;
   }
 
-  requestGrippers()
-  {
-    let self = this;
-
-    // Update time
-    self.gripperControl.time += self.gripperControl.timeDelta_ms;
-
-    // shorter name for easier reading
-    let p = self.gripperControl.pro4;
-
-    // Generate new pro4 packet for each address and send to all
-    for (let gripperId in self.gripperControl.devices)
-    {
-      // Packet len = 6-byte header + 1-byte CRC = 7
-      let packetBuf = self.parser.encode(p.pro4Sync, parseInt(gripperId), p.flags, p.csrAddress, 0, 0);
-      // maintain state by updating at least once per second
-      self.addToPublishQueue(packetBuf);
-    }
-  }
-
   updateGripper(id, command)
   {
     let self = this;
@@ -1536,7 +1522,9 @@ class Bridge extends EventEmitter
     // shorter names for easier reading
     let g = self.gripperControl.devices;
     let p = self.gripperControl.pro4;
-    let i_lim;
+    // defaults
+    let location = 'rov';
+    let i_lim = 0x7fff;
 
     // Generate new pro4 packet
     // Control+current packet format =
@@ -1544,22 +1532,24 @@ class Bridge extends EventEmitter
     if (g.hasOwnProperty(id)) {
       if (g[id].hasOwnProperty('i_lim'))
         i_lim = g[id].i_lim;
-      else
-        i_lim = 0x7fff;
+      if (g[id].hasOwnProperty(location)) {
+        location = g[id].location;
+      }
     }
+
     let payload = new Buffer.allocUnsafe(p.len);
     payload.writeUInt8(command, 0);   // gripper command
     payload.writeUInt8(0, 1);         // flag should be 0
     payload.writeUInt16BE(i_lim, 2);  // max current
     let packetBuf = self.parser.encode(p.pro4Sync, id, p.flags, p.csrAddress, p.len, payload);
-    // maintain state by updating at least once per second
-    self.addToPublishQueue(packetBuf);
+    self.addToPublishQueue(packetBuf, location);
   }
 
   // send crumb644 sensor request
   requestSensors()
   {
     let self = this;
+    let location = 'rov';
 
     // shorter name for easier reading
     let p = self.sensors.pro4;
@@ -1572,9 +1562,14 @@ class Bridge extends EventEmitter
     for (let i = 0; i < p.pro4Addresses.length; i++) {
       (function() {
         let j = i;  // loop closure
+        let id = p.pro4Addresses[j];
+        if (self.sensors.devices.hasOwnProperty(id)) {
+          if (self.sensors.devices[id].hasOwnProperty('location'))
+            location = self.sensors.devices[id].location;
+        }
         // Packet len = Header + 1-byte CRC + payload + 1-byte CRC = 14
-        let packetBuf = self.parser.encode(p.pro4Sync, p.pro4Addresses[j], p.flags, p.csrAddress, p.lenNoop, p.noopPayload);
-        self.addToPublishQueue(packetBuf);
+        let packetBuf = self.parser.encode(p.pro4Sync, id, p.flags, p.csrAddress, p.lenNoop, p.noopPayload);
+        self.addToPublishQueue(packetBuf, location);
       })();
     }
 
@@ -1610,6 +1605,8 @@ class Bridge extends EventEmitter
   updateServos(nodeId, value)
   {
     let self = this;
+    let location = 'rov';
+
     // shorter name for easier reading
     let p = self.sensors.pro4;
 
@@ -1626,10 +1623,14 @@ class Bridge extends EventEmitter
     payload.writeUInt8(p.payloadGpio, 10);      // payload gpio
 
     nodeId = parseInt(nodeId);
+    if (self.sensors.devices.hasOwnProperty(nodeId)) {
+      if (self.sensors.devices[id].hasOwnProperty('location'))
+        location = self.sensors.devices[id].location;
+    }
     // Generate new pro4 packet for each address and send to all modules
     // Packet len = Header + 1-byte CRC + payload + 1-byte CRC = 14
     let packetBuf = self.parser.encode(p.pro4Sync, nodeId, p.flags, p.csrAddress, p.lenBam, payload);
-    self.addToPublishQueue(packetBuf);
+    self.addToPublishQueue(packetBuf, location);
   }
 
   // Updates nav sensor state values, IMU, depth sensors, etc. if reply to
