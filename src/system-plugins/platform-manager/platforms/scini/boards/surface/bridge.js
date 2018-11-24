@@ -551,17 +551,20 @@ class Bridge extends EventEmitter
     });
     self.globalBus.on('plugin.mqttBroker.clientDisconnected', (client) => {
       let clientId = client.id;
-      let clientIp = client.connection.stream.remoteAddress;
       logger.debug('BRIDGE: Received MQTT clientDisconnected() from ' + clientId);
       // stop and empty queue
-      if (typeof(clientId) != 'undefined') {
-        if (clientId.match('elphel.*') !== null
-            && self.mqttConfig[clientIp].receiveMqtt === true) {
+      if (typeof(clientId) === 'string') {
+        if (self.jobs.hasOwnProperty(clientId)) {
+          if (self.jobs[clientId] instanceof q)
+            self.jobs[clientId].end();
+        }
+        if (self.results.hasOwnProperty(clientId)) {
           self.results[clientId] = [];
-          self.jobs[clientId].end();
+        }
+        if (self.clients.hasOwnProperty(clientId)) {
+          delete self.clients[clientId];
         }
       }
-      delete self.clients[clientId];
     });
     self.globalBus.on('plugin.mqttBroker.publishedByClientId', (client) => {
       logger.debug('BRIDGE: MQTT message published by client ' + client);
@@ -590,14 +593,18 @@ class Bridge extends EventEmitter
     });
 
     // stop and empty job queues
-    logger.debug('BRIDGE: Empty and stop MQTT client job queues');
-    // stop and empty queue
-    /* FIX
-    if (clientId.match('elphel.*') !== null
-        && self.mqttConfig[clientIp].receiveMqtt === true) {
+    logger.debug('BRIDGE: Stopping and empyting all MQTT client job queues');
+    for (let clientId in self.jobs) {
+      if (self.jobs[clientId] instanceof q) {
+        self.jobs[clientId].end();
+      }
+    }
+    for (let clientId in self.results) {
       self.results[clientId] = [];
-      self.jobs[clientId].end();
-    }*/
+    }
+    for (let clientId in self.clients) {
+      delete self.clients[clientId];
+    }
   }
 
   write( command )
