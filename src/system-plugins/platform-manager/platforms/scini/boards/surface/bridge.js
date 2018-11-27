@@ -103,8 +103,8 @@ class Bridge extends EventEmitter
     // *********** SCINI concurrency control and parser state objects ****
     this.jobs = {};
     this.results = {};
-    // this object hold data and index for incoming MQTT messages
-    this.clients = {}; // links clientId to their parserBuffer
+    this.clients = {}; // links clientId to their parser
+    this.qInterval = {};
     // *********** SCINI specific platform hardware request state *************
     this.sensors = {
       time:             0,
@@ -236,7 +236,7 @@ class Bridge extends EventEmitter
         },
         87:             {
           name:         'ps2',
-          location:     'rov',
+          location:     'clump',
           commands:     [6],
           len:          1
         },
@@ -262,7 +262,7 @@ class Bridge extends EventEmitter
       updateInterval:   450,    // loop interval in ms
       devices:           {
         61:             { // 61 not used
-          location:     'rov',
+          location:     'clump',
           power:        0.0
         },
         62:             {
@@ -447,7 +447,7 @@ class Bridge extends EventEmitter
       self.mqttConnected = true;
       logger.info('BRIDGE: MQTT broker connection established!');
       logger.info('BRIDGE: Creating surface subscriptions.');
-      self.client.subscribe('$SYS/+/new/clients');
+      //self.client.subscribe('$SYS/+/new/clients');
       self.client.subscribe('status/+'); // receive all status topic messages
       self.client.subscribe('thrusters/+'); // receive all motor control responses
       self.client.subscribe('sensors/+'); // receive all sensor telemetry
@@ -523,25 +523,36 @@ class Bridge extends EventEmitter
         // concurrency = 1 (one message in flight at a time)
         // max wait time for response = 60ms
         // autostart = always running if jobs are in queue
-        // results = store
-        self.clients[clientId] = {};
-        self.clients[clientId].bufIdx = 0; // points to end of received data in parseBuffer
-        self.clients[clientId].parseIdx = 0; // points to current parser index
-        self.clients[clientId].parseBuffer = new Buffer.alloc(1024);
+        self.clients[clientId] = new pro4.Pro4();
+        // results stores most recent job callback
         self.results[clientId] = [];
         self.jobs[clientId] = new q({
                                       concurrency: 1,
                                       timeout: 60,
-                                      autostart: true,
-                                      results: self.results[clientId]
+                                      autostart: true
                                     });
+        self.qInterval[clientId] = setInterval(
+          function() {
+            if (self.jobs[clientId] instanceof q) {
+              let l = self.jobs[clientId].length;
+              logger.debug(`BRIDGE: Queue ${clientId} length = ${l}`);
+              // should handle 100% timeout case after 1.5-2sec
+              if (self.jobs[clientId].length > 50) {
+                // flush the queue
+                self.jobs[clientId].end([null]);
+                self.jobs[clientId].start()
+              }
+            }
+          }, 1000);
         self.jobs[clientId].on('success', function (result, job) {
-          logger.debug(`BRIDGE: sendToMqtt() from clientId ${clientId} produced result ${result}`);
+          logger.debug(`BRIDGE: sendToMqtt() callback from clientId ${clientId} produced result ${result}`);
         });
         self.jobs[clientId].on('error', function (err, job) {
-          logger.error(`BRIDGE: sendToMqtt() from clientId ${clientId} produced error ${err}`);
+          logger.error(`BRIDGE: sendToMqtt() callback from clientId ${clientId} produced error = ${err}`);
         });
         self.jobs[clientId].on('timeout', function (next, job) {
+          // remove callback from queue and reset parser
+          self.results[clientId].shift();
           logger.debug(`BRIDGE: sendToMqtt() from clientId ${clientId} timed out; resetting parser state machine`);
           next();
         });
@@ -568,7 +579,8 @@ class Bridge extends EventEmitter
       }
     });
     self.globalBus.on('plugin.mqttBroker.publishedByClientId', (client) => {
-      logger.debug('BRIDGE: MQTT message published by client ' + client);
+      if (typeof client !== 'undefined')
+        logger.debug('BRIDGE: MQTT message published by client ' + client.id);
     });
   }
 
@@ -1305,11 +1317,13 @@ class Bridge extends EventEmitter
   sendToMqtt(clientId, packetBuf, cb)
   {
     let self = this;
-    self.parser.reset(); // reset state machine
+
+    // parser is only needed after sendToMqtt()
+    self.clients[clientId].reset();
     if(self.mqttConnected)
     {
       self.client.publish('toScini/' + clientId, packetBuf);
-      // defer callback for mqtt message receipt
+      // defer callback until mqtt message receipt by temporarily storing job callback in self.results
       self.results[clientId].push(cb);
       logger.debug('BRIDGE: sendToMqtt() published for client ' + clientId + ' message = ' + packetBuf.toString('hex'));
       if(self.emitRawSerial)
@@ -1711,10 +1725,10 @@ class Bridge extends EventEmitter
     // only send messages from elphel gateways to parser
     if (clientId.match('elphel.*') !== null
         && self.mqttConfig[clientIp].receiveMqtt === true) {
-      let parsedObj = self.parser.parse(message);
+      let parsedObj = self.clients[clientId].parse(message);
       if (parsedObj.status == pro4.constants.STATUS_SUCCESS)
       {
-        let cb = self.results[clientId].pop();
+        let cb = self.results[clientId].shift();
         if (cb instanceof Function) {
           cb(); // advance queue
         }
@@ -1783,21 +1797,19 @@ class Bridge extends EventEmitter
       }
       else if (parsedObj.status == pro4.constants.STATUS_MOREDATA)
       {
-        // XXX - how long do we want to wait for queue timeout advance
-        self.results[clientId].pop(); // allow queue to timeout
         logger.debug('BRIDGE: Waiting for more data; message = ', message.toString('hex'));
       }
       else if (parsedObj.status == pro4.constants.STATUS_ERROR)
       {
-        let cb = self.results[clientId].pop();
+        let cb = self.results[clientId].shift();
         if (cb instanceof Function) {
-          cb(); // advance queue
+          cb('unable to parse buffer'); // advance queue and pass back error to queue listener
         }
         logger.warn('BRIDGE: Error in PRO4 message parser; message = ', message.toString('hex'));
       }
       else // invalid status
       {
-        self.results[clientId].pop(); // allow queue to timeout
+        self.results[clientId].shift(); // allow queue to timeout
         logger.warn('BRIDGE: Invalid PRO4 parser status = ', parsedObj.status, ' ; message = ', message.toString('hex'));
       }
     }

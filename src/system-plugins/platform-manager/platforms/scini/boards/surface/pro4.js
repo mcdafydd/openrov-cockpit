@@ -123,7 +123,7 @@ class Pro4
       payload: 0,
       crcTotal: 0,
       device: {},
-      status: 0,
+      status: constants.STATUS_MOREDATA,
       type: ''
     };
 
@@ -347,7 +347,7 @@ class Pro4
       payload: 0,
       crcTotal: 0,
       device: {},
-      status: 0,
+      status: self.constants.STATUS_MOREDATA,
       type: ''
     };
     self.fsm.ResetState();
@@ -516,6 +516,8 @@ class Pro4
     let self = this;
     let idx = 0;
 
+    self.parsedObj.status = self.constants.STATUS_MOREDATA;
+
     while (idx < buf.length)
     {
       switch(self.fsm.current)
@@ -527,14 +529,13 @@ class Pro4
           {
             self.parsedObj.sync1 = buf[idx];
             self.headBuf[0] = buf[idx];
+            self.fsm.GetSync2();
           }
           else
           {
             logger.debug('PRO4: Invalid PRO4 response at byte = ', buf[idx], 'state = ', self.fsm.current);
-            self.reset();
-            return({status: self.constants.STATUS_ERROR});
+            self.parsedObj.status = self.constants.STATUS_ERROR;
           }
-          self.fsm.GetSync2();
           break;
         }
         case '_s_sync2':
@@ -544,14 +545,13 @@ class Pro4
           {
             self.parsedObj.sync2 = buf[idx];
             self.headBuf[1] = buf[idx];
+            self.fsm.GetId();
           }
           else
           {
             logger.debug('PRO4: Invalid PRO4 response at byte = ', buf[idx], 'state = ', self.fsm.current);
-            self.reset();
-            return({status: self.constants.STATUS_ERROR});
+            self.parsedObj.status = self.constants.STATUS_ERROR;
           }
-          self.fsm.GetId();
           break;
         }
         case '_s_id':
@@ -565,8 +565,7 @@ class Pro4
           else
           {
             logger.debug('PRO4: Invalid PRO4 response device ID = ', buf[idx]);
-            self.reset();
-            return({status: self.constants.STATUS_ERROR});
+            self.parsedObj.status = self.constants.STATUS_ERROR;
           }
           break;
         }
@@ -590,14 +589,13 @@ class Pro4
           {
             self.parsedObj.payloadLen = buf[idx];
             self.headBuf[5] = buf[idx];
+            self.fsm.GetCrcHead();
           }
           else
           {
             logger.warn('PRO4: Received 255 as payload length but we don\'t support extended length packets; Dropping)');
-            self.reset();
-            return({status: self.constants.STATUS_ERROR});
+            self.parsedObj.status = self.constants.STATUS_ERROR;
           }
-          self.fsm.GetCrcHead();
           break;
         }
         case '_s_crcHead':
@@ -611,11 +609,13 @@ class Pro4
             if (buf[idx] != chksum)
             {
               logger.warn('PRO4: Bad header CRC; possible id = ' + self.parsedObj.id);
-              self.reset();
-              return({status: self.constants.STATUS_ERROR});
+              self.parsedObj.status = self.constants.STATUS_ERROR;
             }
-            self.parsedObj.crcHead = buf[idx];
-            self.fsm.GetPayload();
+            else
+            {
+              self.parsedObj.crcHead = buf[idx];
+              self.fsm.GetPayload();
+            }
           }
           else // 4-byte CRC
           {
@@ -627,10 +627,6 @@ class Pro4
             {
               self.parsedObj.crcHead[self.counter-1] = buf[idx];
               self.counter++;
-              if (buf.length-idx+1 < self.parsedObj.crcHead.length) // need to wait for next message
-              {
-                self.parsedObj.status = self.constants.STATUS_MOREDATA;
-              }
               break;
             }
             else if (self.counter == self.parsedObj.crcHead.length)
@@ -640,17 +636,18 @@ class Pro4
               if (calcdChksum != self.parsedObj.crcHead.readUInt32LE(0))
               {
                 logger.warn('PRO4: Bad header CRC32; possible id = ' + self.parsedObj.id);
-                self.reset();
-                return({status: self.constants.STATUS_ERROR});
+                self.parsedObj.status = self.constants.STATUS_ERROR;
               }
-              self.counter = 1;
-              self.fsm.GetPayload();
+              else
+              {
+                self.counter = 1;
+                self.fsm.GetPayload();
+              }
             }
             else // something went awry
             {
               logger.warn('PRO4: Something went wrong with header CRC32; possible id = ' + self.parsedObj.id);
-              self.reset();
-              return({status: self.constants.STATUS_ERROR});
+              self.parsedObj.status = self.constants.STATUS_ERROR;
             }
           }
           break;
@@ -665,24 +662,19 @@ class Pro4
           {
             self.parsedObj.payload[self.counter-1] = buf[idx];
             self.counter++;
-            if (buf.length-idx+1 < self.parsedObj.payloadLen) // need to wait for next message
-            {
-              self.parsedObj.status = self.constants.STATUS_MOREDATA;
-            }
             break;
           }
-          else if (self.counter == self.parsedObj.payloadLen)
+          else if (self.counter == self.parsedObj.payloadLen) // got entire payload
           {
             self.parsedObj.payload[self.counter-1] = buf[idx];
             self.counter = 1;
+            self.fsm.GetCrcTotal();
           }
           else // something went awry
           {
             logger.warn('PRO4: Something went wrong with payload parsing; possible id = ' + self.parsedObj.id);
-            self.reset();
-            return({status: self.constants.STATUS_ERROR});
+            self.parsedObj.status = self.constants.STATUS_ERROR;
           }
-          self.fsm.GetCrcTotal();
           break;
         }
         case '_s_crcTotal':
@@ -696,19 +688,16 @@ class Pro4
             if (buf[idx] != chksum)
             {
               logger.warn('PRO4: Bad total CRC; ', chksum, 'vs ', buf[idx], '; possible id = ' + self.parsedObj.id);
-              self.reset();
-              return({status: self.constants.STATUS_ERROR});
+              self.parsedObj.status = self.constants.STATUS_ERROR;
             }
             else
             {
               // got a good full packet!  Pass it to payload parser
               self.parsedObj.crcTotal = buf[idx];
               self.parsedObj.status = self.constants.STATUS_SUCCESS;
-              self.parsedObj.device = self.parsePayload(self.parsedObj.id, self.parsedObj.payload, self.p);
               logger.debug('PRO4: Good total CRC ', self.parsedObj);
-              return(self.parsedObj);
-
             }
+            return(self.parsedObj);
           }
           else // 4-byte CRC
           {
@@ -720,10 +709,6 @@ class Pro4
             {
               self.parsedObj.crcTotal[self.counter-1] = buf[idx];
               self.counter++;
-              if (buf.length-idx+1 < self.parsedObj.crcTotal.length) // need to wait for next message
-              {
-                self.parsedObj.status = self.constants.STATUS_MOREDATA;
-              }
               break;
             }
             else if (self.counter == self.parsedObj.crcTotal.length)
@@ -733,30 +718,31 @@ class Pro4
               if (calcdChksum != self.parsedObj.crcTotal.readUInt32LE(0))
               {
                 logger.warn('PRO4: Bad total CRC32; possible id = ' + self.parsedObj.id);
-                self.reset();
-                return({status: self.constants.STATUS_ERROR});
+                self.parsedObj.status = self.constants.STATUS_ERROR;
               }
               // got a good full packet!  Pass it to payload parser
               self.parsedObj.status = self.constants.STATUS_SUCCESS;
-              self.parsedObj.device = self.parsePayload(self.parsedObj.id, self.parsedObj.payload, self.p);
-              return(self.parsedObj);
             }
             else // something went awry
             {
               logger.warn('PRO4: Something went wrong with total CRC; possible id = ' + self.parsedObj.id);
-              self.reset();
-              return({status: self.constants.STATUS_ERROR});            }
+              self.parsedObj.status = self.constants.STATUS_ERROR;
+            }
           }
-          self.reset();
-          return({});        }
+        }
+      }
+      if (self.parsedObj.status === self.constants.STATUS_SUCCESS)
+      {
+        self.parsedObj.device = self.parsePayload(self.parsedObj.id, self.parsedObj.payload, self.p);
+      }
+      if (self.parsedObj.status === self.constants.STATUS_ERROR
+          || self.parsedObj.status === self.constants.STATUS_SUCCESS)
+      {
+        break;
       }
       idx++; // advance buffer
     }
-    if (self.parsedObj.status == self.constants.STATUS_MOREDATA)
-    {
-      return({status: self.constants.STATUS_MOREDATA});
-    }
-    return({});
+    return(self.parsedObj);
   };
 
   // Encode PRO4 request and calculate checksum
