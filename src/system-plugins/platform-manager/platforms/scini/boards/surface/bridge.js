@@ -275,7 +275,7 @@ class Bridge extends EventEmitter
         },
         65:             {
           location:     'rov',
-          power:        0.0
+          power:        0.1  // signal the vehicle is responding
         },
         66:             {
           location:     'clump',
@@ -416,12 +416,12 @@ class Bridge extends EventEmitter
     logger.info('BRIDGE: Starting connect() to MQTT broker');
 
     // Add SCINI device control interval functions
-    self.sensorInterval = setInterval( function() { return self.requestSensors(); },          self.sensors.updateInterval );
-    self.boards44Interval = setInterval( function() { return self.requestBoards44(); },          self.boards44.updateInterval );
-    self.navInterval = setInterval( function() { return self.updateNav(); },          self.sensors.navInterval );
-    self.lightsInterval = setInterval( function() { return self.updateLights(); },       self.rovLights.updateInterval );
-    self.motorInterval = setInterval( function() { return self.updateMotors(); },     self.motorControl.updateInterval );
-    self.rotateMotorInterval = setInterval( function() { return self.rotateMotor(); },     self.motorControl.rotateInterval );
+    self.sensorInterval = setInterval( function() { return self.requestSensors(); }, self.sensors.updateInterval );
+    self.boards44Interval = setInterval( function() { return self.requestBoards44(); }, self.boards44.updateInterval );
+    self.navInterval = setInterval( function() { return self.updateNav(); }, self.sensors.navInterval );
+    self.lightsInterval = setInterval( function() { return self.updateLights(); }, self.rovLights.updateInterval );
+    self.motorInterval = setInterval( function() { return self.updateMotors(); }, self.motorControl.updateInterval );
+    self.rotateMotorInterval = setInterval( function() { return self.rotateMotor(); }, self.motorControl.rotateInterval );
 
     // asynchronously flush every 10 seconds to keep the buffer empty
     // in periods of low activity
@@ -531,29 +531,28 @@ class Bridge extends EventEmitter
                                       timeout: 60,
                                       autostart: true
                                     });
+        // should manage 100% timeout case
         self.qInterval[clientId] = setInterval(
           function() {
             if (self.jobs[clientId] instanceof q) {
-              let l = self.jobs[clientId].length;
-              logger.debug(`BRIDGE: Queue ${clientId} length = ${l}`);
-              // should handle 100% timeout case after 1.5-2sec
-              if (self.jobs[clientId].length > 50) {
-                // flush the queue
-                self.jobs[clientId].end([null]);
-                self.jobs[clientId].start()
+              if (self.jobs[clientId].length > 25) {
+                logger.warn(`BRIDGE: Job queue backlog for ${clientId} reached ${self.jobs[clientId].length}; flushing`);
+                // flush the queue - next job push() should restart it
+                self.jobs[clientId].end()
               }
             }
-          }, 1000);
+          }, 5000);
         self.jobs[clientId].on('success', function (result, job) {
-          logger.debug(`BRIDGE: sendToMqtt() callback from clientId ${clientId} produced result ${result}`);
+          logger.debug(`BRIDGE: sendToMqtt() callback from clientId ${clientId}`);
         });
         self.jobs[clientId].on('error', function (err, job) {
           logger.error(`BRIDGE: sendToMqtt() callback from clientId ${clientId} produced error = ${err}`);
         });
         self.jobs[clientId].on('timeout', function (next, job) {
-          // remove callback from queue and reset parser
+          // remove callback from queue; if we receive this response after timeout
+          // it won't advance queue
           self.results[clientId].shift();
-          logger.debug(`BRIDGE: sendToMqtt() from clientId ${clientId} timed out; resetting parser state machine`);
+          logger.debug(`BRIDGE: sendToMqtt() from clientId ${clientId} timed out`);
           next();
         });
         self.jobs[clientId].on('end', function () {
@@ -563,7 +562,7 @@ class Bridge extends EventEmitter
     });
     self.globalBus.on('plugin.mqttBroker.clientDisconnected', (client) => {
       let clientId = client.id;
-      logger.debug('BRIDGE: Received MQTT clientDisconnected() from ' + clientId);
+      logger.warn('BRIDGE: Received MQTT clientDisconnected() from ' + clientId);
       // stop and empty queue
       if (typeof(clientId) === 'string') {
         if (self.jobs.hasOwnProperty(clientId)) {
@@ -575,6 +574,9 @@ class Bridge extends EventEmitter
         }
         if (self.clients.hasOwnProperty(clientId)) {
           delete self.clients[clientId];
+        }
+        if (self.qInterval.hasOwnProperty(clientId)) {
+          clearInterval(self.qInterval[clientId]);
         }
       }
     });
@@ -617,6 +619,9 @@ class Bridge extends EventEmitter
     }
     for (let clientId in self.clients) {
       delete self.clients[clientId];
+    }
+    for (let clientId in self.qInterval) {
+      clearInterval(self.qInterval[clientId]);
     }
   }
 
@@ -1333,7 +1338,7 @@ class Bridge extends EventEmitter
     }
     else
     {
-      logger.debug('BRIDGE: DID NOT SEND TO ROV - client ' + clientId + ' not connected. Advancing queue.');
+      logger.warn('BRIDGE: DID NOT SEND TO ROV - client ' + clientId + ' not connected. Advancing queue.');
       cb();
     }
   }
@@ -1834,7 +1839,7 @@ class Bridge extends EventEmitter
       self.emitStatus(`light.${nodeId}.currentPower:${self.rovLights.devices[nodeId].power}`);
     }
 
-    logger.warn('BRIDGE: Received light control message for nodeId ', nodeId);
+    logger.debug('BRIDGE: Received light control message for nodeId ', nodeId);
   }
 
   // handle ROV servo control requests

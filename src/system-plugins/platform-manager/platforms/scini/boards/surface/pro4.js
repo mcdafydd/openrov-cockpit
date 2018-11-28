@@ -695,9 +695,7 @@ class Pro4
               // got a good full packet!  Pass it to payload parser
               self.parsedObj.crcTotal = buf[idx];
               self.parsedObj.status = self.constants.STATUS_SUCCESS;
-              logger.debug('PRO4: Good total CRC ', self.parsedObj);
             }
-            return(self.parsedObj);
           }
           else // 4-byte CRC
           {
@@ -720,8 +718,11 @@ class Pro4
                 logger.warn('PRO4: Bad total CRC32; possible id = ' + self.parsedObj.id);
                 self.parsedObj.status = self.constants.STATUS_ERROR;
               }
-              // got a good full packet!  Pass it to payload parser
-              self.parsedObj.status = self.constants.STATUS_SUCCESS;
+              else
+              {
+                // got a good full packet!  Pass it to payload parser
+                self.parsedObj.status = self.constants.STATUS_SUCCESS;
+              }
             }
             else // something went awry
             {
@@ -733,6 +734,7 @@ class Pro4
       }
       if (self.parsedObj.status === self.constants.STATUS_SUCCESS)
       {
+        logger.debug('PRO4: Good total CRC, sending to parsePayload() ', self.parsedObj);
         self.parsedObj.device = self.parsePayload(self.parsedObj.id, self.parsedObj.payload, self.p);
       }
       if (self.parsedObj.status === self.constants.STATUS_ERROR
