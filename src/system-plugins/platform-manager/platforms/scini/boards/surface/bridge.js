@@ -725,19 +725,12 @@ class Bridge extends EventEmitter
         power = Math.max(power, 0);
         power = Math.min(power, 1.0);
 
-	      // Ack command
-        self.emitStatus('light_tpow:' + parameters[0] );
-        self.emitStatus('light.61.currentPower:' + parameters[0] );
-
         // Update state object to be sent on next packet interval
-        self.rovLights.devices['61'].power = power;
+        self.rovLights.devices['65'].power = power;
 
         // Ack command
-        setTimeout( function()
-        {
-          self.emitStatus('light_pow:' + power );
-        }, 250 );
-
+        self.emitStatus(`light_tpow:${power};light_pow:${power};`);
+        self.emitStatus('light.65.currentPower:' + parameters[0] + ';');
         break;
       }
 
@@ -748,34 +741,20 @@ class Bridge extends EventEmitter
         power = Math.max(power, 0);
         power = Math.min(power, 1.0);
 
-        // Ack command
-        self.emitStatus('elights_tpow:' + power );
-
         // Update state object to be sent on next packet interval
-        self.rovLights.devices['65'].power = power;
+        self.rovLights.devices['66'].power = power;
 
         // Ack command
-        setTimeout( function()
-        {
-          self.emitStatus('elights_pow:' + power );
-        }, 250 );
-
+        self.emitStatus(`elights_tpow:${power};elights_pow:${power};`);
+        self.emitStatus('light.66.currentPower:' + parameters[0] + ';');
         break;
       }
 
       case 'camServ_tpos':
       {
         // Ack command
-
         let pos = parseInt( parameters[0] );
-        self.emitStatus('camServ_tpos:' + pos );
-
-        setTimeout( function()
-        {
-          // Move to target position
-          self.emitStatus('camServ_pos:' + pos );
-        }, 250 );
-
+        self.emitStatus(`camServ_tpos:${pos};camServ_pos:${pos};`);
         break;
       }
 
