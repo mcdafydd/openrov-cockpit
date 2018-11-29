@@ -76,6 +76,14 @@ server {
 
   }
 
+  location /copilot {
+    alias /opt/openrov/www;
+  }
+
+  location /viewer {
+    alias /opt/openrov/www-ro;
+  }
+
   location /rov/forward-camera {
     proxy_pass http://127.0.0.1:8090/?action=stream;
     proxy_http_version 1.1;
