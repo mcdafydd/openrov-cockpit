@@ -52,8 +52,13 @@
                     // if camera connects to MQTT broker, send normal defaults one time
                     if (client.id.match('elphel.*') !== null) {
                         let cameraIp = client.connection.stream.remoteAddress;
+                        let defaultsUri;
+                        if (cameraIp === '192.168.2.215')
+                          defaultsUri = `http://${cameraIp}/setparameters_demo.php? AUTOEXP_ON=0&WB_EN=1&FLIPH=1&FLIPV=1`;
+                        else
+                          defaultsUri = `http://${cameraIp}/setparameters_demo.php?AUTOEXP_ON=0&WB_EN=1`;
                         deps.logger.debug(`ELPHEL-CONFIG: New camera joined at IP address ${cameraIp}`);
-                        request({timeout: 2000, uri:`http://${cameraIp}/setparameters_demo.php?AUTOEXP_ON=0&WB_EN=1`}, function (err, response, body) {
+                        request({timeout: 2000, uri: defaultsUri}, function (err, response, body) {
                             if (response && response.statusCode == 200) {
                                 deps.logger.debug(`ELPHEL-CONFIG: Default settings set on camera ${cameraIp}`);
                                 // add IP to cameraMap with default properties on success
@@ -159,7 +164,8 @@
 
                 snapFull: new Listener( self.cockpitBus, 'plugin.elphel-config.snapFull', false, function( cameraIp )
                 {
-                    let filename = new Date();
+                    let filename = new Date().toISOString();
+                    filename = filename.replace(/[\.\-T:]/g, '_').replace(/Z/, '');
                     let ts;
                     let id;
                     // Send command to camera
@@ -173,7 +179,7 @@
                         request({timeout: 5000, uri: url, encoding: null}, function(err, response, body) {
                             if (response && response.statusCode == 200) {
                                 deps.logger.debug(`ELPHEL-CONFIG: Snapped full resolution image from camera ${cameraIp}`);
-                                fs.writeFile(`/opt/openrov/images/${ts}/${id}/${filename.toISOString()}_full.jpg`, body, 'binary', function (err) {
+                                fs.writeFile(`/opt/openrov/images/${ts}/${id}/snap_${filename}.jpg`, body, 'binary', function (err) {
                                     deps.logger.info(`ELPHEL-CONFIG: Error trying to write snapFull request on camera ${cameraIp} error: ${err}`);
                                 });
                             }
@@ -328,7 +334,7 @@
             this.client.on('connect', () => {
                 this.mqttConnected = true;
                 deps.logger.info('ELPHEL-CONFIG: MQTT broker connection established!');
-                this.client.subscribe('$SYS/+/new/clients');
+                //this.client.subscribe('$SYS/+/new/clients');
                 this.client.subscribe('toCamera/#'); // receive all camera control requests
                 this.client.subscribe('video/restart');
             });
