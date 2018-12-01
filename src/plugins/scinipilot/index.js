@@ -70,13 +70,13 @@
       this.power = 0.1;
       break;
     case 2:
-      this.power = 0.18;
+      this.power = 0.21;
       break;
     case 3:
-      this.power = 0.44;
+      this.power = 0.35;
       break;
     case 4:
-      this.power = 0.63;
+      this.power = 0.64;
       break;
     case 5:
       this.power = 0.85;
