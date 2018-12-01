@@ -196,9 +196,11 @@
         self.cockpit.emit('plugin.scinipilot.controls', controls);
       });
 
+      /* this should never fire
       self.rovSendPilotingDataTimer = setInterval(function() {
         self.sendPilotingData();
       }, 100 );
+      */
 
       //TODO: Make configurable
       self.cockpit.on('plugin.scinipilot.sendToROVEnabled', function (value) {

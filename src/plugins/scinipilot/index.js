@@ -28,7 +28,7 @@
           powerLevel: self.powerLevel,
           positions: self.positions
         };
-        
+
       callback(state);
     });
     deps.cockpit.on('plugin.rovpilot.setPowerLevel', function (value) {
@@ -67,19 +67,19 @@
   SCINIPilot.prototype.setPowerLevel = function setPowerLevel(value) {
     switch (value) {
     case 1:
-      this.power = 0.12;
+      this.power = 0.1;
       break;
     case 2:
-      this.power = 0.25;
+      this.power = 0.18;
       break;
     case 3:
-      this.power = 0.4;
+      this.power = 0.44;
       break;
     case 4:
-      this.power = 0.7;
+      this.power = 0.63;
       break;
     case 5:
-      this.power = 1;
+      this.power = 0.85;
       break;
     }
     this.powerLevel = value;
@@ -113,7 +113,7 @@
         for (var control in controls) {
           if (controls[control] != this.priorControls[control]) {
             var command = control + '(' + controls[control] * 100 + ')';
-            self.globalEventLoop.emit('mcu.SendCommand', command); 
+            self.globalEventLoop.emit('mcu.SendCommand', command);
           }
         }
       }
