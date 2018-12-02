@@ -292,9 +292,12 @@ class Bridge extends EventEmitter
     }
 
     // This loop should only emit data on the bus if the
-    // pilot requests action
+    // pilot requests action and device has not emitted fault
+    // requested command stored in state property
     // payload first 2 bytes = 0x3549
-    // valid values: open = 3 close = 2 stationary = 0
+    // valid command values: open = 3 close = 2 stationary = 0
+    // cmdStatus: 0=idle, 1,2=opening, 3,4=closing, 5=braking, 6=overcurrent, 7=faulted
+    // The gripper will halt if it does not receive a command every 1.25 seconds.
     this.gripperControl = {
       time:             0,
       timeDelta_ms:     0,
@@ -303,19 +306,19 @@ class Bridge extends EventEmitter
         21:             {
           name:         "Gripper 1",
           location:     "rov",
-          state:        0,
+          command:      0,
           i_lim:        0x7fff
         },
         23:             {
           name:         "Gripper 2 - water sampler",
           location:     "rov",
-          state:        0,
+          command:      0,
           i_lim:        0x7fff
         },
         24:             {
           name:         "Gripper 3 - trim",
           location:     "rov",
-          state:        0,
+          command:      0,
           i_lim:        0x7fff
         },
       },
@@ -726,11 +729,11 @@ class Bridge extends EventEmitter
         power = Math.min(power, 1.0);
 
         // Update state object to be sent on next packet interval
-        self.rovLights.devices['65'].power = power;
+        self.rovLights.devices['62'].power = power;
 
         // Ack command
         self.emitStatus(`light_tpow:${power};light_pow:${power};`);
-        self.emitStatus('light.65.currentPower:' + parameters[0] + ';');
+        self.emitStatus('light.62.currentPower:' + parameters[0] + ';');
         break;
       }
 
@@ -1524,17 +1527,16 @@ class Bridge extends EventEmitter
     let location = 'rov';
     let i_lim = 0x7fff;
 
-    // Generate new pro4 packet
+    // Generate new pro4 packet and update state
     // Control+current packet format =
     // 6B header + 1B CRC + 1B command + 1B flag = 0 + 2B max current + 1B CRC = 12 bytes
     if (g.hasOwnProperty(id)) {
+      g[id].command = command;
       if (g[id].hasOwnProperty('i_lim'))
         i_lim = g[id].i_lim;
-      if (g[id].hasOwnProperty(location)) {
+      if (g[id].hasOwnProperty('location'))
         location = g[id].location;
-      }
     }
-
     let payload = new Buffer.allocUnsafe(p.len);
     payload.writeUInt8(command, 0);   // gripper command
     payload.writeUInt8(0, 1);         // flag should be 0
@@ -1723,6 +1725,24 @@ class Bridge extends EventEmitter
         {
           self.updateSensors(parsedObj); // handles IMU calculations and sending sensor data to cockpit widgets
         }
+        else if (parsedObj.type == 'gripper' || parsedObj.type == 'sampler' || parsedObj.type == 'trim')
+        {
+          let cmdStatus = parseInt(parsedObj.device.cmdStatus);
+          if (cmdStatus === 0) {
+            self.gripperControl.devices[parsedObj.id].command = 0;
+          }
+          // If status is opening/closing, queue new command every second
+          else if (cmdStatus >= 1 && cmdStatus <= 4) {
+            setTimeout(function() {
+              self.updateGripper(parsedObj.id, self.gripperControl.devices[parsedObj.id].command);
+            }, 1000)
+          }
+          // If status is braking/overcurrent, send idle command
+          else if (cmdStatus === 5 || cmdStatus === 6) {
+            self.gripperControl.devices[parsedObj.id].command = 0;
+            self.updateGripper(parsedObj.id, self.gripperControl.devices[parsedObj.id].command);
+          }
+        }
         else if (parsedObj.type == 'board44')
         {
           if (parsedObj.device.cmd == 3) {
@@ -1745,14 +1765,15 @@ class Bridge extends EventEmitter
                 self.updateKeller(parsedObj); // handles sending data to cockpit widget
             }
           }
-          // handles board44bam conversions
+          // adds board44bam conversions as new telemetry fields
+          // retain original values
           else if (parsedObj.device.cmd == 6) {
             // change two temp sensors from voltage to celsius
             if (parsedObj.device.hasOwnProperty('adc1')) {
-              parsedObj.device.adc1 = parsedObj.device.adc1 * 100 - 273.15;
+              parsedObj.device.adc1temp = parsedObj.device.adc1 * 100 - 273.15;
             }
             if (parsedObj.device.hasOwnProperty('adc7')) {
-              parsedObj.device.adc7 = parsedObj.device.adc7 * 100 - 273.15;
+              parsedObj.device.adc7temp = parsedObj.device.adc7 * 100 - 273.15;
             }
           }
         }
