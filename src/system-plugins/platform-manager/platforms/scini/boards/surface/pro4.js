@@ -207,7 +207,7 @@ class Pro4
     this.ParserGrippers = new Parser()
       .uint8('cmd')
       .uint8('cmdStatus')
-      .uint16be('lim_i')
+      .uint16be('i_lim')
       .uint16be('current')
       .uint16be('temp')
       .uint8('devAddress')
@@ -434,7 +434,7 @@ class Pro4
       }
       case 24:
       {
-        this.parsedObj.type = 'gripper';
+        this.parsedObj.type = 'trim';
         return(this.ParserGrippers.parse(this.parsedObj.payload));
       }
       case 23:
@@ -444,7 +444,7 @@ class Pro4
       }
       case 21:
       {
-        this.parsedObj.type = 'trim';
+        this.parsedObj.type = 'gripper';
         return(this.ParserGrippers.parse(this.parsedObj.payload));
       }
       case 81:
