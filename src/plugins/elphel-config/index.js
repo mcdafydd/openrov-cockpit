@@ -61,6 +61,7 @@
                         request({timeout: 2000, uri: defaultsUri}, function (err, response, body) {
                             if (response && response.statusCode == 200) {
                                 deps.logger.debug(`ELPHEL-CONFIG: Default settings set on camera ${cameraIp}`);
+                                self.cockpitBus.emit('plugin.elphel-config.getCamSettings', cameraIp);
                                 // add IP to cameraMap with default properties on success
                                 if (!self.cameraMap.hasOwnProperty(cameraIp))
                                     self.cameraMap[cameraIp] = {};
@@ -96,6 +97,7 @@
                         request({timeout: 2000, uri:`http://${cameraIp}/setparameters_demo.php?BIN_HOR=${resolution}&BIN_VERT=${resolution}&DCM_HOR=${resolution}&DCM_VERT=${resolution}`}, function (err, response, body) {
                             if (response && response.statusCode == 200) {
                                 deps.logger.debug(`ELPHEL-CONFIG: Set resolution 1/${resolution} on camera ${cameraIp}`);
+                                self.cockpitBus.emit('plugin.elphel-config.getCamSettings', cameraIp);
                                 if (self.cameraMap.hasOwnProperty(cameraIp))
                                     self.cameraMap[cameraIp].resolution = resolution;
                             }
@@ -118,6 +120,7 @@
                         request({timeout: 2000, uri:`http://${cameraIp}/setparameters_demo.php?QUALITY=${quality}`}, function (err, response, body) {
                             if (response && response.statusCode == 200) {
                                 deps.logger.debug(`ELPHEL-CONFIG: Setting JPEG quality ${quality}% on camera ${cameraIp}`);
+                                self.cockpitBus.emit('plugin.elphel-config.getCamSettings', cameraIp);
                                 if (self.cameraMap.hasOwnProperty(cameraIp))
                                     self.cameraMap[cameraIp].quality = quality;
                             }
@@ -149,6 +152,7 @@
                         request({timeout: 2000, uri:`http://${cameraIp}/setparameters_demo.php?EXPOS=${newExposure}`}, function (err, response, body) {
                             if (response && response.statusCode == 200) {
                                 deps.logger.debug(`ELPHEL-CONFIG: Setting exposure ${newExposure}us on camera ${cameraIp}`);
+                                self.cockpitBus.emit('plugin.elphel-config.getCamSettings', cameraIp);
                                 if (self.cameraMap.hasOwnProperty(cameraIp))
                                     self.cameraMap[cameraIp].exposure = newExposure;
                             }
@@ -179,6 +183,7 @@
                         request({timeout: 5000, uri: url, encoding: null}, function(err, response, body) {
                             if (response && response.statusCode == 200) {
                                 deps.logger.debug(`ELPHEL-CONFIG: Snapped full resolution image from camera ${cameraIp}`);
+                                self.cockpitBus.emit('plugin.elphel-config.getCamSettings', cameraIp);
                                 fs.writeFile(`/opt/openrov/images/${ts}/${id}/snap_${filename}.jpg`, body, 'binary', function (err) {
                                     deps.logger.info(`ELPHEL-CONFIG: Error trying to write snapFull request on camera ${cameraIp} error: ${err}`);
                                 });
@@ -200,6 +205,7 @@
                         request({timeout: 2000, uri:`http://${cameraIp}/setparameters_demo.php?COLOR=${color}`}, function (err, response, body) {
                             if (response && response.statusCode == 200) {
                                 deps.logger.debug(`ELPHEL-CONFIG: Set color ${colorText} on camera ${cameraIp}`);
+                                self.cockpitBus.emit('plugin.elphel-config.getCamSettings', cameraIp);
                             }
                             if (err) {
                                 deps.logger.error(`ELPHEL-CONFIG: Setting color on camera ${cameraIp} failed with error: ${err}`);
