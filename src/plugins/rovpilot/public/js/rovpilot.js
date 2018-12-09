@@ -1,4 +1,4 @@
-(function (window, $) 
+(function (window, $)
 {
   'use strict';
   class ROVpilot
@@ -9,8 +9,8 @@
       var self = this;
 
       self.cockpit = cockpit;
-      
-      
+
+
       self.positions = {
         throttle: 0,
         yaw: 0,
@@ -34,7 +34,7 @@
       });
 
       //Input mappings
-      self.actions = 
+      self.actions =
       {
         'rovPilot.moveForward':
         {
@@ -48,7 +48,7 @@
               },
               up: function() {
                 self.cockpit.emit('plugin.rovpilot.setThrottle', 0);
-              }           
+              }
             }
           }
         },
@@ -64,7 +64,7 @@
               },
               up: function() {
                 self.cockpit.emit('plugin.rovpilot.setThrottle', 0);
-              }           
+              }
             }
           }
         },
@@ -73,7 +73,7 @@
           description: "Command throttle with gamepad thumbsticks",
           controls:
           {
-            axis: 
+            axis:
             {
               update: function(value) {
                 self.cockpit.emit('plugin.rovpilot.setThrottle', value);
@@ -86,7 +86,7 @@
           description: "Command yaw with gamepad thumbsticks",
           controls:
           {
-            axis: 
+            axis:
             {
               update: function(value) {
                 self.cockpit.emit('plugin.rovpilot.setYaw', value);
@@ -106,7 +106,7 @@
               },
               up: function() {
                 self.cockpit.emit('plugin.rovpilot.setYaw', 0);
-              }           
+              }
             }
           }
         },
@@ -122,7 +122,7 @@
               },
               up: function() {
                 self.cockpit.emit('plugin.rovpilot.setYaw', 0);
-              }           
+              }
             }
           }
         },
@@ -131,7 +131,33 @@
           description: "Command depth with gamepad trigger and bumper",
           controls:
           {
-            axis: 
+            axis:
+            {
+              update: function(value) {
+                self.cockpit.emit('plugin.rovpilot.setLift', value);
+              }
+            }
+          }
+        },
+        'rovPilot.liftUp':
+        {
+          description: "Analog ascend with trigger",
+          controls:
+          {
+            axis:
+            {
+              update: function(value) {
+                self.cockpit.emit('plugin.rovpilot.setLift', value * -1.0);
+              }
+            }
+          }
+        },
+        'rovPilot.liftDown':
+        {
+          description: "Analog descend with trigger",
+          controls:
+          {
+            axis:
             {
               update: function(value) {
                 self.cockpit.emit('plugin.rovpilot.setLift', value);
@@ -151,7 +177,7 @@
               },
               up: function() {
                 self.cockpit.emit('plugin.rovpilot.setLift', 0);
-              }           
+              }
             }
           }
         },
@@ -167,7 +193,7 @@
               },
               up: function() {
                 self.cockpit.emit('plugin.rovpilot.setLift', 0);
-              }           
+              }
             }
           }
         },
@@ -180,7 +206,7 @@
             {
               down: function() {
                 self.cockpit.emit('plugin.rovpilot.setPowerLevel', 1);
-              }          
+              }
             }
           }
         },
@@ -193,7 +219,7 @@
             {
               down: function() {
                 self.cockpit.emit('plugin.rovpilot.setPowerLevel', 2);
-              }          
+              }
             }
           }
         },
@@ -206,7 +232,7 @@
             {
               down: function() {
                 self.cockpit.emit('plugin.rovpilot.setPowerLevel', 3);
-              }          
+              }
             }
           }
         },
@@ -219,7 +245,7 @@
             {
               down: function() {
                 self.cockpit.emit('plugin.rovpilot.setPowerLevel', 4);
-              }          
+              }
             }
           }
         },
@@ -232,7 +258,7 @@
             {
               down: function() {
                 self.cockpit.emit('plugin.rovpilot.setPowerLevel', 5);
-              }          
+              }
             }
           }
         },
@@ -244,7 +270,7 @@
             button:
             {
               down: function() {
-                // Set the ROV's current power level 
+                // Set the ROV's current power level
                 if(self.powerLevel < 5)
                 {
                   self.powerLevel = self.powerLevel + 1;
@@ -262,7 +288,7 @@
             button:
             {
               down: function() {
-                // Set the ROV's current power level 
+                // Set the ROV's current power level
                 if(self.powerLevel > 1)
                 {
                   self.powerLevel = self.powerLevel - 1;
@@ -325,25 +351,45 @@
                                 enabled: false,
                                 rate: 1.0
                               }
-                            } 
+                            }
                           },
-          "RIGHT_TRIGGER": { type: "button",
+          "RIGHT_TRIGGER": { type: "axis",
+                            action: 'rovPilot.liftUp',
+                            options: {
+                              inverted: false,
+                              exponentialSticks: {
+                                enabled: false,
+                                rate: 1.0
+                              }
+                            }
+                          },
+          /*"RIGHT_TRIGGER": { type: "button",
                             action: 'rovPilot.decrementPowerLevel'
-          },
+          },*/
           "RB": { type: "button",
                               action: 'rovPilot.incrementPowerLevel'
           },
-          "LEFT_TRIGGER": { type: "button",
+          "LEFT_TRIGGER": { type: "axis",
+                            action: 'rovPilot.liftDown',
+                            options: {
+                              inverted: false,
+                              exponentialSticks: {
+                                enabled: false,
+                                rate: 1.0
+                              }
+                            }
+                          },
+          /*"LEFT_TRIGGER": { type: "button",
                             action: 'rovPilot.moveDown'
-          },
+          },*/
           "LB": { type: "button",
-                  action: 'rovPilot.moveUp'
+                  action: 'rovPilot.decrementPowerLevel'
           }
         }
       };
     };
-    
-    altMenuDefaults() 
+
+    altMenuDefaults()
     {
       var self = this;
       return [{
@@ -354,7 +400,7 @@
         }];
     };
 
-    listen() 
+    listen()
     {
       //As a general rule, we want to set a desired state before going over the
       //the wire to deliver control signals.  All kinds of problems from late arriving
@@ -373,7 +419,7 @@
       //Initial
       //Get the stick values
       self.cockpit.withHistory.on('settings-change.rovPilot', function (settings) {
-        
+
         //Init settings with defaults
         self.settings = settings.rovPilot;
       });
@@ -445,7 +491,7 @@
       }, 2000);
     }
 
-    sendPilotingData() 
+    sendPilotingData()
     {
       var self = this;
       var positions = self.positions;
