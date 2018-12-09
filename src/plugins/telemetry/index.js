@@ -19,6 +19,18 @@ function telemetry(name, deps) {
       {
         statusdata[i] = data[i] * 0.001;
       }
+      // total count for mqtt.timeout.<clientId> and mqtt.error.<clientId>
+      else if (i.match('^mqtt') !== null) {
+        if (statusdata.hasOwnProperty(i)) {
+          // quick, simple handler for overflow
+          // server is often left running
+          if (statusdata[i] === Number.MAX_VALUE)
+            statusdata[i] = 0;
+          statusdata[i] += parseInt(data[i]);
+        }
+        else
+          statusdata[i] = parseInt(data[i]);
+      }
       else
         statusdata[i] = data[i];
     }
