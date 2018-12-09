@@ -183,7 +183,6 @@
                         request({timeout: 5000, uri: url, encoding: null}, function(err, response, body) {
                             if (response && response.statusCode == 200) {
                                 deps.logger.debug(`ELPHEL-CONFIG: Snapped full resolution image from camera ${cameraIp}`);
-                                self.cockpitBus.emit('plugin.elphel-config.getCamSettings', cameraIp);
                                 fs.writeFile(`/opt/openrov/images/${ts}/${id}/snap_${filename}.jpg`, body, 'binary', function (err) {
                                     deps.logger.info(`ELPHEL-CONFIG: Error trying to write snapFull request on camera ${cameraIp} error: ${err}`);
                                 });
