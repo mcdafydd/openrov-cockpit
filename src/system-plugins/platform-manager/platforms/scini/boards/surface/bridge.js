@@ -549,9 +549,11 @@ class Bridge extends EventEmitter
           logger.debug(`BRIDGE: sendToMqtt() callback from clientId ${clientId}`);
         });
         self.jobs[clientId].on('error', function (err, job) {
+          self.emitStatus(`mqtt.error.${clientId}:1;`);
           logger.error(`BRIDGE: sendToMqtt() callback from clientId ${clientId} produced error = ${err}`);
         });
         self.jobs[clientId].on('timeout', function (next, job) {
+          self.emitStatus(`mqtt.timeout.${clientId}:1;`);
           // remove callback from queue; if we receive this response after timeout
           // it won't advance queue
           self.results[clientId].shift();
