@@ -15,6 +15,8 @@
         throttle: 0,
         yaw: 0,
         lift: 0,
+        liftUp: 0,
+        liftDown: 0,
         pitch: 0,
         roll: 0,
         strafe: 0
@@ -447,7 +449,11 @@
       });
 
       self.cockpit.on('plugin.rovpilot.setLift', function(value) {
-        self.positions.lift = value;
+        if (value < 0)
+          self.positions.liftUp = value;
+        else if (value > 0)
+          self.positions.liftDown = value;
+        self.positions.lift = self.positions.liftUp + self.positions.liftDown;
       });
 
       self.cockpit.on('plugin.rovpilot.setPitch', function (value) {
