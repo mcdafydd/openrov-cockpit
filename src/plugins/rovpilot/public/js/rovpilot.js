@@ -10,7 +10,6 @@
 
       self.cockpit = cockpit;
 
-
       self.positions = {
         throttle: 0,
         yaw: 0,
@@ -21,8 +20,10 @@
         roll: 0,
         strafe: 0
       };
+
       self.powerLevel = 1;
       self.priorControls = {};
+      self.triggerDb = 0.1 // left/right trigger dead band
 
       self.sendToROVEnabled = true;
       self.sendUpdateEnabled = true;
@@ -449,10 +450,18 @@
       });
 
       self.cockpit.on('plugin.rovpilot.setLift', function(value) {
-        if (value < 0)
-          self.positions.liftUp = value;
-        else if (value > 0)
-          self.positions.liftDown = value;
+        if (value < 0) {
+          if (value > -self.triggerDb)
+            self.positions.liftUp = 0;
+          else
+            self.positions.liftUp = 1.111*value+self.triggerDb;
+        }
+        else if (value > 0) {
+          if (value < self.triggerDb)
+            self.positions.liftDown = 0;
+          else
+            self.positions.liftDown = 1.111*value-self.triggerDb;
+        }
         else {
           // make assumption that zeros only come from keyboard events
           // pilots shouldn't be using gamepad and keyboard together
