@@ -453,6 +453,12 @@
           self.positions.liftUp = value;
         else if (value > 0)
           self.positions.liftDown = value;
+        else {
+          // make assumption that zeros only come from keyboard events
+          // pilots shouldn't be using gamepad and keyboard together
+          self.positions.liftUp = 0;
+          self.positions.liftDown = 0;
+        }
         self.positions.lift = self.positions.liftUp + self.positions.liftDown;
       });
 
