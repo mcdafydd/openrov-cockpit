@@ -220,6 +220,8 @@
                 <paper-dropdown-menu id="axisDropdown" label="axis control">
                     <paper-listbox id="gamepadAxisListbox" class="dropdown-content" attr-for-selected="value" selected="{{candidateBinding}}" on-iron-select="openAxisOptionsModal">
                         <paper-item value="empty"></paper-item>
+                        <paper-item value="LEFT_TRIGGER">{{__('LEFT_TRIGGER')}}</paper-item>
+                        <paper-item value="RIGHT_TRIGGER">{{__('RIGHT_TRIGGER')}}</paper-item>
                         <paper-item value="LEFT_STICK_X">{{__('LEFT_STICK_X')}}</paper-item>
                         <paper-item value="LEFT_STICK_Y">{{__('LEFT_STICK_Y')}}</paper-item>
                         <paper-item value="RIGHT_STICK_X">{{__('RIGHT_STICK_X')}}</paper-item>
@@ -323,8 +325,6 @@
                         <paper-item value="Y">{{__('Y')}}</paper-item>
                         <paper-item value="LB">{{__('LB')}}</paper-item>
                         <paper-item value="RB">{{__('RB')}}</paper-item>
-                        <paper-item value="LEFT_TRIGGER">{{__('LEFT_TRIGGER')}}</paper-item>
-                        <paper-item value="RIGHT_TRIGGER">{{__('RIGHT_TRIGGER')}}</paper-item>
                         <paper-item value="LEFT_STICK">{{__('LEFT_STICK')}}</paper-item>
                         <paper-item value="RIGHT_STICK">{{__('RIGHT_STICK')}}</paper-item>
                         <paper-item value="START">{{__('START')}}</paper-item>
