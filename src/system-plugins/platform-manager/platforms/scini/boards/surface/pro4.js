@@ -437,12 +437,12 @@ class Pro4
         this.parsedObj.type = 'trim';
         return(this.ParserGrippers.parse(this.parsedObj.payload));
       }
-      case 23:
+      case 21:
       {
         this.parsedObj.type = 'waterSampler';
         return(this.ParserGrippers.parse(this.parsedObj.payload));
       }
-      case 21:
+      case 23:
       {
         this.parsedObj.type = 'gripper';
         return(this.ParserGrippers.parse(this.parsedObj.payload));

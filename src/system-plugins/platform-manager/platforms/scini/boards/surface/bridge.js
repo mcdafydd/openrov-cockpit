@@ -267,7 +267,7 @@ class Bridge extends EventEmitter
         },
         62:             {
           location:     'rov',
-          power:        0.0
+          power:        0.1
         },
         63:             {
           location:     'rov',
@@ -303,13 +303,13 @@ class Bridge extends EventEmitter
       timeDelta_ms:     0,
       updateInterval:   500,  // loop interval in ms
       devices:             {
-        21:             {
+        23:             {
           name:         "Gripper 1",
           location:     "rov",
           command:      0,
           i_lim:        0x7fff
         },
-        23:             {
+        21:             {
           name:         "Gripper 2 - water sampler",
           location:     "rov",
           command:      0,
@@ -896,21 +896,21 @@ class Bridge extends EventEmitter
 
       case 'gripper_open':
       {
-        self.updateGripper(24, 2);
+        self.updateGripper(21, 2);
         self.emitStatus(`gripper.open:1;gripper.close:0;`);
         break;
       }
 
       case 'gripper_close':
       {
-        self.updateGripper(24, 3);
+        self.updateGripper(21, 3);
         self.emitStatus(`gripper.close:1;gripper.open:0;`);
         break;
       }
 
       case 'gripper_stationary':
       {
-        self.updateGripper(24, 0);
+        self.updateGripper(21, 0);
         self.emitStatus(`gripper.stationary:1;gripper.close:0;gripper.open:0;`);
         break;
       }
@@ -937,21 +937,21 @@ class Bridge extends EventEmitter
       }
       case 'trim_open':
       {
-        self.updateGripper(21, 2);
+        self.updateGripper(24, 2);
         self.emitStatus(`trim.open:1;trim.close:0;`);
         break;
       }
 
       case 'trim_close':
       {
-        self.updateGripper(21, 3);
+        self.updateGripper(24, 3);
         self.emitStatus(`trim.close:1;trim.open:0;`);
         break;
       }
 
       case 'trim_stationary':
       {
-        self.updateGripper(21, 0);
+        self.updateGripper(24, 0);
         self.emitStatus(`trim_stationary:1;trim_close:0;trim_open:0;`);
         break;
       }
