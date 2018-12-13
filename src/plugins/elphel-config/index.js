@@ -54,7 +54,7 @@
                         let cameraIp = client.connection.stream.remoteAddress;
                         let defaultsUri;
                         if (cameraIp === '192.168.2.215')
-                          defaultsUri = `http://${cameraIp}/setparameters_demo.php? AUTOEXP_ON=0&WB_EN=1&FLIPH=1&FLIPV=1`;
+                          defaultsUri = `http://${cameraIp}/setparameters_demo.php?AUTOEXP_ON=0&WB_EN=1&FLIPH=1&FLIPV=1`;
                         else
                           defaultsUri = `http://${cameraIp}/setparameters_demo.php?AUTOEXP_ON=0&WB_EN=1`;
                         deps.logger.debug(`ELPHEL-CONFIG: New camera joined at IP address ${cameraIp}`);
