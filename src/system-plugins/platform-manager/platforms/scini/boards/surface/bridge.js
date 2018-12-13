@@ -153,13 +153,13 @@ class Bridge extends EventEmitter
       devices:           {
         51:             {
           location:     'clump',
-          center:       0x8000,
+          center:       0xbb80,
           speed:        8192
         },
         52:             {
           location:     'rov',
-          center:       0x8000,
-          speed:        8192
+          center:       0x9088,
+          speed:        9500
         },
         57:             {
           location:     'rov',
@@ -168,7 +168,7 @@ class Bridge extends EventEmitter
         },
         58:             {
           location:     'rov',
-          center:       0x8000,
+          center:       0xb478,
           speed:        8192
         },
         67:             {
@@ -538,7 +538,7 @@ class Bridge extends EventEmitter
         self.results[clientId] = [];
         self.jobs[clientId] = new q({
                                       concurrency: 1,
-                                      timeout: 60,
+                                      timeout: 200,
                                       autostart: true
                                     });
         // should manage 100% timeout case
@@ -1315,7 +1315,12 @@ class Bridge extends EventEmitter
     let self = this;
 
     // parser is only needed after sendToMqtt()
-    self.clients[clientId].reset();
+    // make sure to only reset parser if the queue still exists
+    if (self.clients.hasOwnProperty(clientId)) {
+      if (typeof self.clients[clientId].reset !== 'undefined') {
+        self.clients[clientId].reset();
+      }
+    }
     if(self.mqttConnected)
     {
       self.client.publish('toScini/' + clientId, packetBuf);
