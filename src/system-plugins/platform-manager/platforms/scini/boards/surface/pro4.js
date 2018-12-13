@@ -531,9 +531,9 @@ class Pro4
             self.headBuf[0] = buf[idx];
             self.fsm.GetSync2();
           }
-          else
+          else if (idx+1 === buf.length) // end of buffer
           {
-            logger.debug('PRO4: Invalid PRO4 response at byte = ', buf[idx], 'state = ', self.fsm.current);
+            logger.debug('PRO4: No valid sync byte in PRO4 response at byte = ', buf[idx], 'state = ', self.fsm.current);
             self.parsedObj.status = self.constants.STATUS_ERROR;
           }
           break;
