@@ -38,6 +38,13 @@ const logger        = require('AppFramework.js').logger;
 const pro4          = require('./pro4');
 const q             = require('queue');
 
+/*
+process.on('uncaughtException', err => {
+  console.error(err, 'Uncaught Exception thrown');
+  process.exit(1);
+});
+*/
+
 // Setup buffered logging for telemetry
 function addZero(i) {
   if (i < 10) {
@@ -1626,8 +1633,8 @@ class Bridge extends EventEmitter
 
     nodeId = parseInt(nodeId);
     if (self.sensors.devices.hasOwnProperty(nodeId)) {
-      if (self.sensors.devices[id].hasOwnProperty('location'))
-        location = self.sensors.devices[id].location;
+      if (self.sensors.devices[nodeId].hasOwnProperty('location'))
+        location = self.sensors.devices[nodeId].location;
     }
     // Generate new pro4 packet for each address and send to all modules
     // Packet len = Header + 1-byte CRC + payload + 1-byte CRC = 14
