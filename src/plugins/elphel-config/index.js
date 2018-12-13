@@ -52,15 +52,28 @@
                     // if camera connects to MQTT broker, send normal defaults one time
                     if (client.id.match('elphel.*') !== null) {
                         let cameraIp = client.connection.stream.remoteAddress;
-                        let defaultsUri;
-                        if (cameraIp === '192.168.2.215')
-                          defaultsUri = `http://${cameraIp}/setparameters_demo.php? AUTOEXP_ON=0&WB_EN=1&FLIPH=1&FLIPV=1`;
-                        else
-                          defaultsUri = `http://${cameraIp}/setparameters_demo.php?AUTOEXP_ON=0&WB_EN=1`;
+                        let defaultsUri = `http://${cameraIp}/setparameters_demo.php?COLOR=1&AUTOEXP_ON=0&WB_EN=1`;
+                        if (cameraIp === '192.168.2.218')
+                          defaultsUri += '&FLIPH=1&FLIPV=1';
+                        if (self.cameraMap.hasOwnProperty(cameraIp)) {
+                          if (self.cameraMap[cameraIp].hasOwnProperty('resolution')) {
+                            let res = self.cameraMap[cameraIp].resolution;
+                            defaultsUri += `&BIN_HOR=${res}&BIN_VERT=${res}&DCM_HOR=${res}&DCM_VERT=${res}`;
+                          }
+                          if (self.cameraMap[cameraIp].hasOwnProperty('quality')) {
+                            let qual = self.cameraMap[cameraIp].quality;
+                            defaultsUri += `&QUALITY=${qual}`;
+                          }
+                          if (self.cameraMap[cameraIp].hasOwnProperty('exposure')) {
+                            let exp = self.cameraMap[cameraIp].exposure;
+                            defaultsUri += `&EXPOS=${exp}`;
+                          }
+                        }
                         deps.logger.debug(`ELPHEL-CONFIG: New camera joined at IP address ${cameraIp}`);
+                        deps.logger.debug(`ELPHEL-CONFIG: Pushing last known camera settings uri ${defaultsUri}`);
                         request({timeout: 2000, uri: defaultsUri}, function (err, response, body) {
                             if (response && response.statusCode == 200) {
-                                deps.logger.debug(`ELPHEL-CONFIG: Default settings set on camera ${cameraIp}`);
+                                deps.logger.debug(`ELPHEL-CONFIG: Last known settings set on camera ${cameraIp}`);
                                 self.cockpitBus.emit('plugin.elphel-config.getCamSettings', cameraIp);
                                 // add IP to cameraMap with default properties on success
                                 if (!self.cameraMap.hasOwnProperty(cameraIp))
