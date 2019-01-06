@@ -35,7 +35,6 @@ const logger        = require('AppFramework.js').logger;
 const Parser        = require('./lib/binary_parser').Parser;
 const StateMachine  = require('javascript-state-machine');
 const CRC           = require('crc');
-const nconf         = require('nconf');
 
 // ******************************************************************
 //  Device types are defined by VideoRay
@@ -293,12 +292,12 @@ class Pro4
       .int16le('imuTemp')
 
     this.fsm = this.createStateMachine();
-  };
+  }
 
   fsmEnterHandler(event, from, to)
   {
     logger.debug('PRO4: Parser moved from ' + from + ' to ' + to);
-  };
+  }
 
   createStateMachine()
   {
@@ -330,7 +329,7 @@ class Pro4
         on_s_crcTotal:        self.fsmEnterHandler
       }
     });
-  };
+  }
 
   reset()
   {
@@ -737,15 +736,15 @@ class Pro4
         logger.debug('PRO4: Good total CRC, sending to parsePayload() ', self.parsedObj);
         self.parsedObj.device = self.parsePayload(self.parsedObj.id, self.parsedObj.payload, self.p);
       }
-      if (self.parsedObj.status === self.constants.STATUS_ERROR
-          || self.parsedObj.status === self.constants.STATUS_SUCCESS)
+      if (self.parsedObj.status === self.constants.STATUS_ERROR ||
+            self.parsedObj.status === self.constants.STATUS_SUCCESS)
       {
         break;
       }
       idx++; // advance buffer
     }
     return(self.parsedObj);
-  };
+  }
 
   // Encode PRO4 request and calculate checksum
   encode(sync, id, flags, csrAddress, len, payload)
@@ -805,7 +804,7 @@ class Pro4
 
     logger.debug('PRO4: Encoded PRO4 request = ' + buf.toString('hex'));
     return buf;
-  };
+  }
 
 } // end class Pro4
 

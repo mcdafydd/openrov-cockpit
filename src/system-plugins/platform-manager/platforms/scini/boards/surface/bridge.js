@@ -60,8 +60,9 @@ const h             = addZero(d.getHours());
 const m             = addZero(d.getMinutes());
 const ts            = day + months[d.getMonth()] + h + m;
 const logDir        = '/opt/openrov/data/' + ts;
-if (!fs.existsSync(logDir))
+if (!fs.existsSync(logDir)) {
   fs.mkdirSync(logDir, '0775');
+}
 // TODO: upgrade to pino v5 - we're using v3 in cockpit shrinkwrap for now
 // v5 ref: https://github.com/pinojs/pino/blob/master/docs/extreme.md
 const fd = fs.openSync(`${logDir}/${ts}.log`, 'w');
@@ -71,8 +72,8 @@ const dataLogger = pino({extreme: true}, fs.createWriteStream(null, {fd: fd}));
 dataLogger.level = 'warn'; // default level
 
 let mqttConfigFile;
-if(!fs.existsSync('/opt/openrov/config/mqttConfig.json')
-    || fs.statSync('/opt/openrov/config/mqttConfig.json').size === 0) {
+if(!fs.existsSync('/opt/openrov/config/mqttConfig.json') ||
+      fs.statSync('/opt/openrov/config/mqttConfig.json').size === 0) {
   logger.error('BRIDGE: /opt/openrov/config/mqttConfig.json - file not found or zero size');
   logger.error('BRIDGE: Exiting...');
   process.exit(1);
@@ -527,8 +528,8 @@ class Bridge extends EventEmitter
       self.mqttConfigId[clientId] = clientIp;
       logger.info('BRIDGE: Received MQTT clientConnected() from ' + clientId);
       // create new message queue for each ROV MQTT gateway
-      if (clientId.match('elphel.*') !== null
-          && self.mqttConfig[clientIp].receiveMqtt === true) {
+      if (clientId.match('elphel.*') !== null &&
+            self.mqttConfig[clientIp].receiveMqtt === true) {
         // create new state machine, parse buffer, and job queue
         // concurrency = 1 (one message in flight at a time)
         // max wait time for response = 60ms
@@ -552,14 +553,14 @@ class Bridge extends EventEmitter
               }
             }
           }, 5000);
-        self.jobs[clientId].on('success', function (result, job) {
+        self.jobs[clientId].on('success', function () {
           logger.debug(`BRIDGE: sendToMqtt() callback from clientId ${clientId}`);
         });
-        self.jobs[clientId].on('error', function (err, job) {
+        self.jobs[clientId].on('error', function (err) {
           self.emitStatus(`mqtt.error.${clientId}:1;`);
           logger.error(`BRIDGE: sendToMqtt() callback from clientId ${clientId} produced error = ${err}`);
         });
-        self.jobs[clientId].on('timeout', function (next, job) {
+        self.jobs[clientId].on('timeout', function (next) {
           self.emitStatus(`mqtt.timeout.${clientId}:1;`);
           // remove callback from queue; if we receive this response after timeout
           // it won't advance queue
@@ -578,8 +579,9 @@ class Bridge extends EventEmitter
       // stop and empty queue
       if (typeof(clientId) === 'string') {
         if (self.jobs.hasOwnProperty(clientId)) {
-          if (self.jobs[clientId] instanceof q)
+          if (self.jobs[clientId] instanceof q) {
             self.jobs[clientId].end();
+          }
         }
         if (self.results.hasOwnProperty(clientId)) {
           self.results[clientId] = [];
@@ -593,8 +595,9 @@ class Bridge extends EventEmitter
       }
     });
     self.globalBus.on('plugin.mqttBroker.publishedByClientId', (client) => {
-      if (typeof client !== 'undefined')
+      if (typeof client !== 'undefined') {
         logger.debug('BRIDGE: MQTT message published by client ' + client.id);
+      }
     });
   }
 
@@ -627,13 +630,19 @@ class Bridge extends EventEmitter
       }
     }
     for (let clientId in self.results) {
-      self.results[clientId] = [];
+      if (self.results.hasOwnProperty(clientId)) {
+        self.results[clientId] = [];
+      }
     }
     for (let clientId in self.clients) {
-      delete self.clients[clientId];
+      if (self.clients.hasOwnProperty(clientId)) {
+        delete self.clients[clientId];
+      }
     }
     for (let clientId in self.qInterval) {
-      clearInterval(self.qInterval[clientId]);
+      if (self.qInterval.hasOwnProperty(clientId)) {
+        clearInterval(self.qInterval[clientId]);
+      }
     }
   }
 
@@ -1491,7 +1500,7 @@ class Bridge extends EventEmitter
       }
       // first address in array is a multicast group
       packetBuf = self.parser.encode(p.pro4Sync, p.pro4Addresses[0], p.flags, p.csrAddress, p.len, payload);
-      // maintain state by updating at least once per second
+      // maintain desired motor movement by updating at least once per second
       self.addToPublishQueue(packetBuf, 'rov');
     }
     else {
@@ -1507,15 +1516,6 @@ class Bridge extends EventEmitter
         })();
       }
     }
-
-    let x, y;
-    for (x = 0; y <  m.length; x++) {
-      payload.writeFloatLE(thrust, 2);
-    }
-
-    // Emit status update
-    // this.emit( 'status', this.parseStatus( result ) );
-    //this.emit( 'status', this.parseStatus( result ) );
   }
 
   rotateMotor()
@@ -1601,17 +1601,20 @@ class Bridge extends EventEmitter
 
     for (let nodeId in self.boards44.devices) {
       for (let i = 0; i < self.boards44.devices[nodeId].commands.length; i++) {
-        let cmd = self.boards44.devices[nodeId].commands[i];
-        let len = self.boards44.devices[nodeId].len;
-        payload = new Buffer.allocUnsafe(len);
-        payload.writeUInt8(cmd, 0);
-        if (cmd === 3) {
-          // command 3 needs the ASCII string to send to the device
-          payload.write('00:#030\r\n',1);
+        let cmd, len;
+        if (self.boards44.devices.hasOwnProperty(nodeId)) {
+          cmd = self.boards44.devices[nodeId].commands[i];
+          len = self.boards44.devices[nodeId].len;
+          payload = new Buffer.allocUnsafe(len);
+          payload.writeUInt8(cmd, 0);
+          if (cmd === 3) {
+            // command 3 needs the ASCII string to send to the device
+            payload.write('00:#030\r\n',1);
+          }
+          let packetBuf = self.parser.encode(p.pro4Sync, parseInt(nodeId), p.flags, p.csrAddress, len, payload);
+          self.addToPublishQueue(packetBuf, self.boards44.devices[nodeId].location);
+          logger.debug(`BRIDGE: Queued Boards44 command ${cmd} for nodeId ${nodeId}, buf = ${packetBuf.toString('hex')}`);
         }
-        let packetBuf = self.parser.encode(p.pro4Sync, parseInt(nodeId), p.flags, p.csrAddress, len, payload);
-        self.addToPublishQueue(packetBuf, self.boards44.devices[nodeId].location);
-        logger.debug(`BRIDGE: Queued Boards44 command ${cmd} for nodeId ${nodeId}, buf = ${packetBuf.toString('hex')}`);
       }
     }
   }
@@ -1628,8 +1631,8 @@ class Bridge extends EventEmitter
     p.bamPayload.copy(payload);
 
     // value = 0 is servo off; 1 and 65535 are maximum either dir
-    if (value < 1) value = 1;
-    else if (value > 0xfffe) value = 0xfffe;
+    if (value < 1) { value = 1 }
+    else if (value > 0xfffe) { value = 0xfffe }
     // we only care about servo 1 at the moment
     logger.debug(`BRIDGE: Updating servo on sensor ID ${nodeId} to value ${value}`);
     payload.writeUInt16LE(value, 6);            // payload servo1
@@ -1723,8 +1726,8 @@ class Bridge extends EventEmitter
     if (self.mqttConfigId.hasOwnProperty(clientId))
       clientIp = self.mqttConfigId[clientId];
     // only send messages from elphel gateways to parser
-    if (clientId.match('elphel.*') !== null
-        && self.mqttConfig[clientIp].receiveMqtt === true) {
+    if (clientId.match('elphel.*') !== null &&
+          self.mqttConfig[clientIp].receiveMqtt === true) {
       let parsedObj = self.clients[clientId].parse(message);
       if (parsedObj.status == pro4.constants.STATUS_SUCCESS)
       {
@@ -1820,6 +1823,7 @@ class Bridge extends EventEmitter
       }
       else if (parsedObj.status == pro4.constants.STATUS_ERROR)
       {
+        // XXX - should advance queue if error occurs after _s_sync1, but
         let cb = self.results[clientId].shift();
         if (cb instanceof Function) {
           cb('unable to parse buffer'); // advance queue and pass back error to queue listener
@@ -1893,8 +1897,9 @@ class Bridge extends EventEmitter
     if (value === 0 || value === 2 || value === 3) {
       self.updateGripper(nodeId, value);
     }
-    else
+    else {
       logger.debug('BRIDGE: Received invalid gripper control message ', value, ' for nodeId ', nodeId);
+    }
   }
 }
 

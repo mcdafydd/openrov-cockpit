@@ -15,8 +15,9 @@
 				"--nolazy"
 			],
 			"env": {
-				"EXTERNAL_CAM": "true",
-				"EXTERNAL_CAM_URL": "http://192.168.1.222:8081/bmimg",
+        "EXTERNAL_CAM": "true",
+        "EXTERNAL_CAM_IP": "192.168.2.215",
+				"EXTERNAL_CAM_URL": "http://192.168.2.215:8081/bmimg",
 				"NODE_ENV": "development",
 				"PLATFORM": "scini",
 				"BOARD":	"surface",
@@ -35,8 +36,7 @@
 				"LOG_LEVEL":"debug"
 			},
             "console": "internalConsole",
-			"sourceMaps": false,
-			"outDir": null
+			"sourceMaps": false
 		},
 		{
 			"name": "Attach",
@@ -46,7 +46,6 @@
             "address": "localhost",
             "restart": false,
             "sourceMaps": false,
-            "outDir": null,
             "localRoot": "${workspaceRoot}",
             "remoteRoot": null
 
